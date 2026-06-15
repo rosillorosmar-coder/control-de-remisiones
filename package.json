@@ -1,0 +1,20 @@
+{
+  "name": "control-remisiones",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aplicacion web interna para control de remisiones, clientes y pagos.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "NODE_ENV=development node server.js",
+    "check": "node --check server.js && node --check app.js && node --check scripts/add-user.js && node --check scripts/backup-db.js",
+    "db:check": "sqlite3 data/remisiones.db 'PRAGMA integrity_check;'",
+    "db:backup": "node scripts/backup-db.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

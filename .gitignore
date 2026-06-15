@@ -1,0 +1,13 @@
+data/store.json
+data/remisiones.db
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/remisiones.db-shm
+data/remisiones.db-wal
+data/*.tmp
+backups/
+.env
+.env.production
+.vercel/
+.*.swp

@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Control de remisiones</title>
+    <link rel="stylesheet" href="styles.css?v=20260605-antiguedad">
+  </head>
+  <body>
+    <section class="login-screen" id="loginScreen">
+      <form class="login-card" id="loginForm">
+        <div class="brand login-brand">
+          <div class="brand-mark" aria-hidden="true">CR</div>
+          <div>
+            <strong>Remisiones</strong>
+            <span>Acceso interno</span>
+          </div>
+        </div>
+        <div>
+          <p class="eyebrow">Solo tu negocio</p>
+          <h1>Iniciar sesión</h1>
+        </div>
+        <label>Usuario
+          <input id="loginUsername" autocomplete="username" required>
+        </label>
+        <label>Contraseña
+          <input id="loginPassword" type="password" autocomplete="current-password" required>
+        </label>
+        <button class="primary-button full" type="submit">Entrar</button>
+        <p class="login-help" id="loginMessage">Usuario inicial: admin / admin123</p>
+      </form>
+    </section>
+
+    <div class="app-shell locked" id="appShell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">CR</div>
+          <div>
+            <strong>Remisiones</strong>
+            <span>Cuentas de clientes</span>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="Secciones">
+          <button class="nav-item active" data-view="dashboard">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/></svg>
+            Panel
+          </button>
+          <button class="nav-item" data-view="clients">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.67 0-5 1.34-5 3v2h10v-2c0-1.66-2.33-3-5-3Zm8 0c-.29 0-.62.02-.97.07 1.18.84 1.97 1.88 1.97 3.1V18h4v-2c0-1.66-2.33-3-5-3Z"/></svg>
+            Clientes
+          </button>
+          <button class="nav-item" data-view="remissions">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2Zm8 1.5V8h4.5L14 3.5ZM8 12h8v2H8v-2Zm0 4h8v2H8v-2Z"/></svg>
+            Remisiones
+          </button>
+          <button class="nav-item" data-view="aging">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10v2h3v18H4V4h3V2Zm2 2h6V2H9v2ZM6 6v14h12V6H6Zm2 3h8v2H8V9Zm0 4h8v2H8v-2Zm0 4h5v2H8v-2Z"/></svg>
+            Antigüedad
+          </button>
+          <button class="nav-item" data-view="paymentRequests">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v2h3v16H4V5h3V3Zm2 2h6V3H9v2Zm-3 2v12h12V7H6Zm2 3h8v2H8v-2Zm0 4h5v2H8v-2Z"/></svg>
+            Solicitudes
+          </button>
+          <button class="nav-item" data-view="payments">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V8c0-1.1.9-2 2-2Zm0 3v2h16V9H4Zm3 5v2h5v-2H7Z"/></svg>
+            Pagos
+          </button>
+          <button class="nav-item admin-only" data-view="users">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Zm7-4V7h-2V5h2V3h2v2h2v2h-2v3h-2Z"/></svg>
+            Usuarios
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <button class="ghost-button" id="exportJsonButton">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2ZM19 9h-4V3H9v6H5l7 7 7-7Z"/></svg>
+            Respaldo
+          </button>
+          <label class="ghost-button file-button data-file-button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6Zm-1 7V3.5L18.5 9H13Z"/></svg>
+            Restaurar
+            <input type="file" id="importJsonInput" accept="application/json">
+          </label>
+          <button class="ghost-button danger-link" id="clearDataButton">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12ZM8 9h8v10H8V9Zm7.5-5-1-1h-5l-1 1H5v2h14V4h-3.5Z"/></svg>
+            Borrar datos
+          </button>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Control operativo</p>
+            <h1 id="viewTitle">Panel</h1>
+          </div>
+          <div class="topbar-actions">
+            <div class="user-chip" id="userChip"></div>
+            <button class="secondary-button" id="changePasswordButton">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17a2 2 0 0 0 2-2c0-.74-.4-1.38-1-1.72V11h-2v2.28c-.6.34-1 .98-1 1.72a2 2 0 0 0 2 2Zm6-8h-1V7A5 5 0 0 0 7 7v2H6c-1.1 0-2 .9-2 2v9c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-9c0-1.1-.9-2-2-2ZM9 7a3 3 0 0 1 6 0v2H9V7Zm9 13H6v-9h12v9Z"/></svg>
+              Contraseña
+            </button>
+            <button class="secondary-button" id="logoutButton">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-2h4V9h-4V7l-5 5 5 5Zm9-14H9c-1.1 0-2 .9-2 2v4h2V5h10v14H9v-4H7v4c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2Z"/></svg>
+              Salir
+            </button>
+            <button class="secondary-button" id="printButton">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V2h12v7h2c1.1 0 2 .9 2 2v6h-4v5H6v-5H2v-6c0-1.1.9-2 2-2h2Zm2-5v5h8V4H8Zm0 12v4h8v-4H8Zm10-1h2v-4H4v4h2v-1h12v1Z"/></svg>
+              Imprimir
+            </button>
+            <button class="primary-button" id="quickRemissionButton">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2Z"/></svg>
+              Remisión
+            </button>
+          </div>
+        </header>
+
+        <section class="view active" id="dashboardView">
+          <div class="metrics-grid" id="metricsGrid"></div>
+          <div class="content-grid">
+            <section class="panel span-7">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Cartera</p>
+                  <h2>Clientes con saldo</h2>
+                </div>
+                <button class="text-button" data-view-jump="clients">Ver clientes</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Remisiones</th>
+                      <th>Abonos</th>
+                      <th>Saldo</th>
+                    </tr>
+                  </thead>
+                  <tbody id="balanceTable"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel span-5">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Movimiento</p>
+                  <h2>Actividad reciente</h2>
+                </div>
+              </div>
+              <div class="activity-list" id="activityList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="agingView">
+          <div class="metrics-grid" id="agingMetrics"></div>
+          <div class="content-grid">
+            <section class="panel span-12">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Cartera</p>
+                  <h2>Antigüedad de saldos</h2>
+                </div>
+                <button class="secondary-button small" id="exportAgingButton">CSV</button>
+              </div>
+              <div class="toolbar">
+                <label class="search-field">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3a6.5 6.5 0 0 1 5.14 10.48l5.44 5.44-1.41 1.41-5.44-5.44A6.5 6.5 0 1 1 9.5 3Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z"/></svg>
+                  <input type="search" id="agingSearch" placeholder="Buscar cliente o clave">
+                </label>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Clave</th>
+                      <th>Cliente</th>
+                      <th>0 a 15 días</th>
+                      <th>16 a 30 días</th>
+                      <th>31 a 45 días</th>
+                      <th>46 a 60 días</th>
+                      <th>Más de 61 días</th>
+                      <th>Total</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="agingTable"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="clientsView">
+          <div class="split-layout">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Directorio</p>
+                  <h2>Clientes</h2>
+                </div>
+                <button class="secondary-button small" id="exportClientsButton">CSV</button>
+              </div>
+              <div class="toolbar">
+                <label class="search-field">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3a6.5 6.5 0 0 1 5.14 10.48l5.44 5.44-1.41 1.41-5.44-5.44A6.5 6.5 0 1 1 9.5 3Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z"/></svg>
+                  <input type="search" id="clientSearch" placeholder="Buscar cliente">
+                </label>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Clave</th>
+                      <th>Nombre</th>
+                      <th>Contacto</th>
+                      <th>Teléfono</th>
+                      <th>Saldo</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="clientsTable"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Alta y edición</p>
+                  <h2 id="clientFormTitle">Nuevo cliente</h2>
+                </div>
+                <button class="icon-button" id="resetClientFormButton" title="Limpiar formulario" aria-label="Limpiar formulario">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 7l5 5V9c3.31 0 6 2.69 6 6a6 6 0 0 1-10.24 4.24l-1.42 1.42A8 8 0 0 0 20 15c0-4.42-3.58-8-8-8Z"/></svg>
+                </button>
+              </div>
+              <form id="clientForm" class="form-grid">
+                <input type="hidden" id="clientId">
+                <label>Clave
+                  <input id="clientClave" required>
+                </label>
+                <label>Nombre comercial
+                  <input id="clientName" required autocomplete="organization">
+                </label>
+                <label>Contacto
+                  <input id="clientContact" autocomplete="name">
+                </label>
+                <label>Teléfono
+                  <input id="clientPhone" autocomplete="tel">
+                </label>
+                <label class="full">Dirección
+                  <input id="clientAddress" autocomplete="street-address">
+                </label>
+                <label class="full">Notas
+                  <textarea id="clientNotes" rows="4"></textarea>
+                </label>
+                <button class="primary-button full" type="submit">Guardar cliente</button>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="remissionsView">
+          <div class="content-grid">
+            <section class="panel span-7">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Documentos</p>
+                  <h2>Remisiones</h2>
+                </div>
+                <div class="button-group">
+                  <button class="secondary-button small" id="downloadRemissionTemplateButton">Plantilla Excel</button>
+                  <label class="secondary-button small file-button" id="importRemissionsLabel">
+                    Importar plantilla
+                    <input type="file" id="importRemissionsInput" accept=".xls,.html,.csv,text/html,text/csv">
+                  </label>
+                  <button class="secondary-button small" id="exportRemissionsButton">CSV</button>
+                </div>
+              </div>
+              <div class="toolbar">
+                <label class="search-field">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3a6.5 6.5 0 0 1 5.14 10.48l5.44 5.44-1.41 1.41-5.44-5.44A6.5 6.5 0 1 1 9.5 3Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z"/></svg>
+                  <input type="search" id="remissionSearch" placeholder="Folio, clave o cliente">
+                </label>
+                <select id="remissionStatusFilter" aria-label="Filtrar por estado">
+                  <option value="all">Todas</option>
+                  <option value="pending">Pendientes</option>
+                  <option value="partial">Con abono</option>
+                  <option value="paid">Pagadas</option>
+                </select>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Folio</th>
+                      <th>Clave cliente</th>
+                      <th>Cliente</th>
+                      <th>Fecha</th>
+                      <th>Fecha entrega</th>
+                      <th>Fecha pago</th>
+                      <th>Días</th>
+                      <th>Total</th>
+                      <th>Saldo</th>
+                      <th>Estado</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="remissionsTable"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel span-5">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Captura</p>
+                  <h2 id="remissionFormTitle">Nueva remisión</h2>
+                </div>
+                <button class="icon-button" id="resetRemissionFormButton" title="Limpiar formulario" aria-label="Limpiar formulario">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 7l5 5V9c3.31 0 6 2.69 6 6a6 6 0 0 1-10.24 4.24l-1.42 1.42A8 8 0 0 0 20 15c0-4.42-3.58-8-8-8Z"/></svg>
+                </button>
+              </div>
+              <form id="remissionForm" class="form-grid">
+                <input type="hidden" id="remissionId">
+                <label>Folio
+                  <input id="remissionFolio" required>
+                </label>
+                <label>Fecha
+                  <input id="remissionDate" type="date" required>
+                </label>
+                <label>Fecha de entrega
+                  <input id="remissionDeliveryDate" type="date">
+                </label>
+                <label class="full">Cliente
+                  <select id="remissionClient" required></select>
+                </label>
+                <label class="full">Total de remisión
+                  <input id="remissionTotal" type="number" min="0" step="0.01" required>
+                </label>
+                <label class="full">Notas
+                  <textarea id="remissionNotes" rows="3"></textarea>
+                </label>
+                <button class="primary-button full" type="submit">Guardar remisión</button>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="paymentRequestsView">
+          <div class="content-grid">
+            <section class="panel span-12">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Pre-cobranza</p>
+                  <h2>Solicitudes de pago</h2>
+                </div>
+              </div>
+              <div class="toolbar">
+                <label class="search-field">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3a6.5 6.5 0 0 1 5.14 10.48l5.44 5.44-1.41 1.41-5.44-5.44A6.5 6.5 0 1 1 9.5 3Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z"/></svg>
+                  <input type="search" id="paymentRequestSearch" placeholder="Cliente, folio o estado">
+                </label>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Folio</th>
+                      <th>Fecha</th>
+                      <th>Cliente</th>
+                      <th>Remisiones</th>
+                      <th>Monto</th>
+                      <th>Estado</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="paymentRequestsTable"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel span-12">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Solicitud</p>
+                  <h2>Nueva solicitud</h2>
+                </div>
+                <button class="icon-button" id="resetPaymentRequestFormButton" title="Limpiar formulario" aria-label="Limpiar formulario">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 7l5 5V9c3.31 0 6 2.69 6 6a6 6 0 0 1-10.24 4.24l-1.42 1.42A8 8 0 0 0 20 15c0-4.42-3.58-8-8-8Z"/></svg>
+                </button>
+              </div>
+              <form id="paymentRequestForm" class="form-grid">
+                <label>Folio
+                  <input id="paymentRequestFolio" readonly>
+                </label>
+                <label>Fecha emisión
+                  <input id="paymentRequestDate" type="date" required>
+                </label>
+                <label class="full">Cliente
+                  <select id="paymentRequestClient" required></select>
+                </label>
+                <div class="full request-lines" id="paymentRequestRemissions"></div>
+                <label class="full">Observación
+                  <textarea id="paymentRequestNotes" rows="3"></textarea>
+                </label>
+                <div class="request-total full">
+                  <span>Total a cobrar</span>
+                  <strong id="paymentRequestTotal">$0.00</strong>
+                </div>
+                <button class="primary-button full" type="submit">Guardar solicitud</button>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="paymentsView">
+          <div class="content-grid">
+            <section class="panel span-12">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Cobranza</p>
+                  <h2>Pagos y abonos</h2>
+                </div>
+                <button class="secondary-button small" id="exportPaymentsButton">CSV</button>
+              </div>
+              <div class="toolbar">
+                <label class="search-field">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3a6.5 6.5 0 0 1 5.14 10.48l5.44 5.44-1.41 1.41-5.44-5.44A6.5 6.5 0 1 1 9.5 3Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z"/></svg>
+                  <input type="search" id="paymentSearch" placeholder="Cliente, folio o referencia">
+                </label>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID pago</th>
+                      <th>Fecha</th>
+                      <th>Cliente</th>
+                      <th>Aplicado a</th>
+                      <th>Método</th>
+                      <th>Monto</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="paymentsTable"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="usersView">
+          <div class="split-layout">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Accesos</p>
+                  <h2>Usuarios</h2>
+                </div>
+              </div>
+              <div class="toolbar">
+                <label class="search-field">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3a6.5 6.5 0 0 1 5.14 10.48l5.44 5.44-1.41 1.41-5.44-5.44A6.5 6.5 0 1 1 9.5 3Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z"/></svg>
+                  <input type="search" id="userSearch" placeholder="Buscar usuario">
+                </label>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Usuario</th>
+                      <th>Rol</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="usersTable"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Alta y edición</p>
+                  <h2 id="userFormTitle">Nuevo usuario</h2>
+                </div>
+                <button class="icon-button" id="resetUserFormButton" title="Limpiar formulario" aria-label="Limpiar formulario">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 7l5 5V9c3.31 0 6 2.69 6 6a6 6 0 0 1-10.24 4.24l-1.42 1.42A8 8 0 0 0 20 15c0-4.42-3.58-8-8-8Z"/></svg>
+                </button>
+              </div>
+              <form id="userForm" class="form-grid">
+                <input type="hidden" id="userId">
+                <label>Nombre
+                  <input id="userName" required autocomplete="name">
+                </label>
+                <label>Usuario
+                  <input id="userUsername" required autocomplete="username">
+                </label>
+                <label>Rol
+                  <select id="userRole">
+                    <option value="admin">Administrador</option>
+                    <option value="captura">Captura</option>
+                    <option value="cobranza">Cobranza</option>
+                    <option value="consulta">Consulta</option>
+                  </select>
+                </label>
+                <label>Contraseña
+                  <input id="userPassword" type="password" autocomplete="new-password">
+                </label>
+                <p class="form-hint full" id="userPasswordHint">Para usuarios nuevos, usa al menos 6 caracteres.</p>
+                <button class="primary-button full" type="submit">Guardar usuario</button>
+              </form>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="detailDialog">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">Detalle</p>
+          <h2 id="detailTitle">Cuenta</h2>
+        </div>
+        <button class="icon-button" id="closeDialogButton" title="Cerrar" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18.3 5.71-1.41-1.41L12 9.17 7.11 4.3 5.7 5.71 10.59 10.6 5.7 15.49l1.41 1.41L12 12.01l4.89 4.89 1.41-1.41-4.89-4.89 4.89-4.89Z"/></svg>
+        </button>
+      </div>
+      <div id="detailContent"></div>
+    </dialog>
+
+    <dialog id="passwordDialog">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">Seguridad</p>
+          <h2>Cambiar contraseña</h2>
+        </div>
+        <button class="icon-button" id="closePasswordDialogButton" title="Cerrar" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18.3 5.71-1.41-1.41L12 9.17 7.11 4.3 5.7 5.71 10.59 10.6 5.7 15.49l1.41 1.41L12 12.01l4.89 4.89 1.41-1.41-4.89-4.89 4.89-4.89Z"/></svg>
+        </button>
+      </div>
+      <form id="passwordForm" class="dialog-form">
+        <label>Contraseña actual
+          <input id="currentPassword" type="password" autocomplete="current-password" required>
+        </label>
+        <label>Nueva contraseña
+          <input id="newPassword" type="password" autocomplete="new-password" minlength="6" required>
+        </label>
+        <label>Confirmar nueva contraseña
+          <input id="confirmPassword" type="password" autocomplete="new-password" minlength="6" required>
+        </label>
+        <p class="form-hint" id="passwordHint">Usa al menos 6 caracteres.</p>
+        <button class="primary-button full" type="submit">Actualizar contraseña</button>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js?v=20260605-antiguedad"></script>
+  </body>
+</html>
