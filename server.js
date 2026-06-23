@@ -721,6 +721,19 @@ function sessionFromRequest(req) {
 }
 
 async function readJson(req) {
+  if (req.body !== undefined) {
+    if (Buffer.isBuffer(req.body)) {
+      const text = req.body.toString("utf8");
+      return text ? JSON.parse(text) : {};
+    }
+    if (typeof req.body === "string") {
+      return req.body ? JSON.parse(req.body) : {};
+    }
+    if (typeof req.body === "object" && req.body !== null) return req.body;
+  }
+
+  if (!req[Symbol.asyncIterator]) return {};
+
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
