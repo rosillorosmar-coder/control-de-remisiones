@@ -611,7 +611,7 @@ function renderAging() {
 function renderClients() {
   const query = els.clientSearch.value.trim().toLowerCase();
   const rows = state.clients
-    .filter((client) => [client.clave, client.name, client.contact, client.phone, client.address].join(" ").toLowerCase().includes(query))
+    .filter((client) => [client.clave, client.name, client.contact, client.phone, client.address, client.notes].join(" ").toLowerCase().includes(query))
     .sort((a, b) => String(a.clave || a.name).localeCompare(String(b.clave || b.name), "es"));
 
   els.clientsTable.innerHTML = rows.length
@@ -621,7 +621,11 @@ function renderClients() {
           return `
             <tr>
               <td><strong>${escapeHtml(client.clave || client.id)}</strong></td>
-              <td><strong>${escapeHtml(client.name)}</strong><br><span>${escapeHtml(client.address || "")}</span></td>
+              <td>
+                <strong>${escapeHtml(client.name)}</strong>
+                ${client.address ? `<br><span>${escapeHtml(client.address)}</span>` : ""}
+                ${client.notes ? `<br><span>Nota: ${escapeHtml(client.notes)}</span>` : ""}
+              </td>
               <td>${escapeHtml(client.contact || "-")}</td>
               <td>${escapeHtml(client.phone || "-")}</td>
               <td class="money"><strong>${currency(totals.balance)}</strong></td>
