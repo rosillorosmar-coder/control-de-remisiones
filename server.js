@@ -71,6 +71,8 @@ async function initializeStore() {
       clave TEXT,
       name TEXT NOT NULL,
       contact TEXT,
+      seller_key TEXT,
+      seller_name TEXT,
       phone TEXT,
       address TEXT,
       notes TEXT
@@ -117,6 +119,8 @@ async function initializeStore() {
   `);
   await ensureColumn("clients", "clave", "TEXT");
   await ensureColumn("clients", "contact", "TEXT");
+  await ensureColumn("clients", "seller_key", "TEXT");
+  await ensureColumn("clients", "seller_name", "TEXT");
   await ensureColumn("remissions", "delivery_date", "TEXT");
   await ensureColumn("remissions", "total", "REAL NOT NULL DEFAULT 0");
   await ensureColumn("payments", "folio", "TEXT");
@@ -144,7 +148,7 @@ async function initializeStore() {
 async function readStore() {
   await ensureStore();
   const [clients, remissions, payments, paymentRequests, users] = await Promise.all([
-    sqliteJson("SELECT id, clave, name, contact, phone, address, notes FROM clients ORDER BY name;"),
+    sqliteJson("SELECT id, clave, name, contact, seller_key AS sellerKey, seller_name AS sellerName, phone, address, notes FROM clients ORDER BY name;"),
     sqliteJson("SELECT id, folio, client_id AS clientId, date, delivery_date AS deliveryDate, total, notes, items_json AS itemsJson FROM remissions ORDER BY date DESC, folio;"),
     sqliteJson("SELECT id, folio, client_id AS clientId, remission_id AS remissionId, date, amount, method, reference, notes FROM payments ORDER BY date DESC;"),
     sqliteJson(`
@@ -186,6 +190,8 @@ async function readStore() {
       ...client,
       clave: client.clave || client.id,
       contact: client.contact || "",
+      sellerKey: client.sellerKey || "",
+      sellerName: client.sellerName || "",
       phone: client.phone || "",
       address: client.address || "",
       notes: client.notes || "",
@@ -259,12 +265,14 @@ async function writeStore(store) {
       );
     `),
     ...(store.clients || []).map((client) => `
-      INSERT INTO clients (id, clave, name, contact, phone, address, notes)
+      INSERT INTO clients (id, clave, name, contact, seller_key, seller_name, phone, address, notes)
       VALUES (
         ${sqlValue(client.id)},
         ${sqlValue(client.clave || client.id)},
         ${sqlValue(client.name)},
         ${sqlValue(client.contact || "")},
+        ${sqlValue(client.sellerKey || "")},
+        ${sqlValue(client.sellerName || "")},
         ${sqlValue(client.phone || "")},
         ${sqlValue(client.address || "")},
         ${sqlValue(client.notes || "")}
@@ -434,6 +442,8 @@ function sqlForPostgres(sql) {
 function normalizePgRows(rows) {
   const aliases = {
     clientid: "clientId",
+    sellerkey: "sellerKey",
+    sellername: "sellerName",
     deliverydate: "deliveryDate",
     itemsjson: "itemsJson",
     passwordhash: "passwordHash",

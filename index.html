@@ -216,6 +216,8 @@
                       <th>Clave</th>
                       <th>Nombre</th>
                       <th>Contacto</th>
+                      <th>Clave vendedor</th>
+                      <th>Vendedor</th>
                       <th>Teléfono</th>
                       <th>Saldo</th>
                       <th></th>
@@ -246,6 +248,12 @@
                 </label>
                 <label>Contacto
                   <input id="clientContact" autocomplete="name">
+                </label>
+                <label>Clave de vendedor
+                  <input id="clientSellerKey">
+                </label>
+                <label>Vendedor
+                  <input id="clientSellerName">
                 </label>
                 <label>Teléfono
                   <input id="clientPhone" autocomplete="tel">
@@ -559,6 +567,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260623-notas-clientes"></script>
+    <script src="app.js?v=20260623-vendedor-clientes"></script>
   </body>
 </html>

@@ -611,7 +611,12 @@ function renderAging() {
 function renderClients() {
   const query = els.clientSearch.value.trim().toLowerCase();
   const rows = state.clients
-    .filter((client) => [client.clave, client.name, client.contact, client.phone, client.address, client.notes].join(" ").toLowerCase().includes(query))
+    .filter((client) =>
+      [client.clave, client.name, client.contact, client.sellerKey, client.sellerName, client.phone, client.address, client.notes]
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    )
     .sort((a, b) => String(a.clave || a.name).localeCompare(String(b.clave || b.name), "es"));
 
   els.clientsTable.innerHTML = rows.length
@@ -627,6 +632,8 @@ function renderClients() {
                 ${client.notes ? `<br><span>Nota: ${escapeHtml(client.notes)}</span>` : ""}
               </td>
               <td>${escapeHtml(client.contact || "-")}</td>
+              <td>${escapeHtml(client.sellerKey || "-")}</td>
+              <td>${escapeHtml(client.sellerName || "-")}</td>
               <td>${escapeHtml(client.phone || "-")}</td>
               <td class="money"><strong>${currency(totals.balance)}</strong></td>
               <td>
@@ -644,7 +651,7 @@ function renderClients() {
           `;
         })
         .join("")
-    : `<tr><td colspan="6"><div class="empty-state">No hay clientes con ese filtro.</div></td></tr>`;
+    : `<tr><td colspan="8"><div class="empty-state">No hay clientes con ese filtro.</div></td></tr>`;
 }
 
 function renderRemissions() {
@@ -948,6 +955,8 @@ function editClient(id) {
   document.querySelector("#clientClave").value = client.clave || client.id;
   document.querySelector("#clientName").value = client.name;
   document.querySelector("#clientContact").value = client.contact || "";
+  document.querySelector("#clientSellerKey").value = client.sellerKey || "";
+  document.querySelector("#clientSellerName").value = client.sellerName || "";
   document.querySelector("#clientPhone").value = client.phone || "";
   document.querySelector("#clientAddress").value = client.address || "";
   document.querySelector("#clientNotes").value = client.notes || "";
@@ -1789,6 +1798,8 @@ els.clientForm.addEventListener("submit", async (event) => {
     clave: document.querySelector("#clientClave").value.trim(),
     name: document.querySelector("#clientName").value.trim(),
     contact: document.querySelector("#clientContact").value.trim(),
+    sellerKey: document.querySelector("#clientSellerKey").value.trim(),
+    sellerName: document.querySelector("#clientSellerName").value.trim(),
     phone: document.querySelector("#clientPhone").value.trim(),
     address: document.querySelector("#clientAddress").value.trim(),
     notes: document.querySelector("#clientNotes").value.trim(),
