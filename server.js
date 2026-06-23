@@ -576,8 +576,12 @@ function hashPassword(password, salt) {
 }
 
 async function verifyPassword(password, user) {
+  if (!user?.passwordHash || !user?.salt) return false;
   const hash = await hashPassword(password, user.salt);
-  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(user.passwordHash, "hex"));
+  const expected = Buffer.from(String(user.passwordHash), "hex");
+  const actual = Buffer.from(hash, "hex");
+  if (expected.length !== actual.length) return false;
+  return crypto.timingSafeEqual(actual, expected);
 }
 
 function publicUser(user) {
@@ -842,34 +846,41 @@ async function handleApi(req, res, pathname) {
   }
 
   if (pathname === "/api/login" && req.method === "POST") {
-    const { username, password } = await readJson(req);
-    const key = loginKey(req, username);
-    const status = loginStatus(key);
-    if (status.blocked) {
-      return sendJson(req, res, 429, { error: "Demasiados intentos. Intenta más tarde" }, {
-        "Retry-After": String(status.retryAfter),
+    try {
+      const { username, password } = await readJson(req);
+      const key = loginKey(req, username);
+      const status = loginStatus(key);
+      if (status.blocked) {
+        return sendJson(req, res, 429, { error: "Demasiados intentos. Intenta más tarde" }, {
+          "Retry-After": String(status.retryAfter),
+        });
+      }
+
+      const store = await readStore();
+      const user = store.users.find((item) => item.username.toLowerCase() === String(username || "").toLowerCase());
+
+      if (!user || !(await verifyPassword(String(password || ""), user))) {
+        recordLoginFailure(key);
+        return sendJson(req, res, 401, { error: "Usuario o contraseña incorrectos" });
+      }
+
+      recordLoginSuccess(key);
+      const safeUser = publicUser(user);
+      if (user.username === "admin" && !user.mustChangePassword && (await verifyPassword("admin123", user))) {
+        safeUser.mustChangePassword = true;
+      }
+      const sessionId = SESSION_SECRET ? signedSessionToken(safeUser) : crypto.randomBytes(32).toString("hex");
+      if (!SESSION_SECRET) sessions.set(sessionId, { user: safeUser, expiresAt: Date.now() + SESSION_TTL_MS });
+
+      return sendJson(req, res, 200, { user: safeUser }, {
+        "Set-Cookie": sessionCookie(req, sessionId, SESSION_TTL_MS / 1000),
+      });
+    } catch (error) {
+      return sendJson(req, res, 500, {
+        error: safeDatabaseError(error),
+        code: safeDatabaseErrorCode(error),
       });
     }
-
-    const store = await readStore();
-    const user = store.users.find((item) => item.username.toLowerCase() === String(username || "").toLowerCase());
-
-    if (!user || !(await verifyPassword(String(password || ""), user))) {
-      recordLoginFailure(key);
-      return sendJson(req, res, 401, { error: "Usuario o contraseña incorrectos" });
-    }
-
-    recordLoginSuccess(key);
-    const safeUser = publicUser(user);
-    if (user.username === "admin" && !user.mustChangePassword && (await verifyPassword("admin123", user))) {
-      safeUser.mustChangePassword = true;
-    }
-    const sessionId = SESSION_SECRET ? signedSessionToken(safeUser) : crypto.randomBytes(32).toString("hex");
-    if (!SESSION_SECRET) sessions.set(sessionId, { user: safeUser, expiresAt: Date.now() + SESSION_TTL_MS });
-
-    return sendJson(req, res, 200, { user: safeUser }, {
-      "Set-Cookie": sessionCookie(req, sessionId, SESSION_TTL_MS / 1000),
-    });
   }
 
   if (pathname === "/api/logout" && req.method === "POST") {
