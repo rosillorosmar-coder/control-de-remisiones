@@ -206,6 +206,7 @@ La app mantiene ambos modos:
 - `vercel.json`: dirige todas las rutas hacia la funcion serverless.
 - `api/index.js`: entrada serverless que reutiliza `server.js`.
 - `server.js`: detecta `DATABASE_URL` o `POSTGRES_URL` y usa Postgres.
+- `public/`: copia estatica de `index.html`, `app.js` y `styles.css` para que Vercel sirva la pantalla principal.
 
 ### Requisitos en Vercel
 
