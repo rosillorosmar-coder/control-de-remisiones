@@ -458,6 +458,11 @@ function safeDatabaseError(error) {
   return message.slice(0, 160);
 }
 
+function safeDatabaseErrorCode(error) {
+  const code = String(error?.code || error?.errno || error?.name || "").trim();
+  return /^[a-z0-9_ -]+$/i.test(code) ? code.slice(0, 80) : "";
+}
+
 async function migrateRemissionTotals() {
   const remissions = await sqliteJson("SELECT id, total, items_json AS itemsJson FROM remissions;");
   const updates = remissions
@@ -823,6 +828,7 @@ async function handleApi(req, res, pathname) {
       return sendJson(req, res, 500, {
         ok: false,
         error: safeDatabaseError(error),
+        code: safeDatabaseErrorCode(error),
         storage: USE_POSTGRES ? "postgres" : "sqlite",
         environment: PRODUCTION ? "production" : "development",
       });
