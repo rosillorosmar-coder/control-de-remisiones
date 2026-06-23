@@ -14,6 +14,7 @@ const DB_FILE = path.resolve(process.env.DB_FILE || path.join(DATA_DIR, "remisio
 const POSTGRES_URL = process.env.POSTGRES_URL || process.env.DATABASE_URL || "";
 const USE_POSTGRES = Boolean(POSTGRES_URL);
 const SESSION_SECRET = process.env.SESSION_SECRET || "";
+const RUNNING_ON_VERCEL = Boolean(process.env.VERCEL);
 const SESSION_TTL_MS = 1000 * 60 * 60 * 10;
 const LOGIN_WINDOW_MS = 1000 * 60 * 15;
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -38,7 +39,12 @@ const blankBusinessData = () => ({ clients: [], remissions: [], payments: [], pa
 
 async function ensureStore() {
   if (!storeReadyPromise) storeReadyPromise = initializeStore();
-  return storeReadyPromise;
+  try {
+    return await storeReadyPromise;
+  } catch (error) {
+    storeReadyPromise = null;
+    throw error;
+  }
 }
 
 async function initializeStore() {
@@ -444,6 +450,14 @@ function normalizePgRows(rows) {
   );
 }
 
+function safeDatabaseError(error) {
+  const message = String(error?.message || "No se pudo conectar a la base de datos");
+  if (/password|auth|authentication/i.test(message)) return "No se pudo autenticar con la base de datos";
+  if (/ENOTFOUND|getaddrinfo|timeout|ECONNREFUSED|network/i.test(message)) return "No se pudo conectar con el host de la base de datos";
+  if (/does not exist|relation|syntax/i.test(message)) return message.slice(0, 160);
+  return message.slice(0, 160);
+}
+
 async function migrateRemissionTotals() {
   const remissions = await sqliteJson("SELECT id, total, items_json AS itemsJson FROM remissions;");
   const updates = remissions
@@ -789,13 +803,30 @@ function rolePermissionMessage(role) {
 
 async function handleApi(req, res, pathname) {
   if (pathname === "/api/health" && req.method === "GET") {
-    await ensureStore();
-    const [{ ok }] = await sqliteJson("SELECT 1 AS ok;");
-    return sendJson(req, res, 200, {
-      ok: Number(ok) === 1,
-      storage: USE_POSTGRES ? "postgres" : "sqlite",
-      environment: PRODUCTION ? "production" : "development",
-    });
+    if (RUNNING_ON_VERCEL && !USE_POSTGRES) {
+      return sendJson(req, res, 500, {
+        ok: false,
+        error: "Falta DATABASE_URL o POSTGRES_URL en Vercel",
+        storage: "not-configured",
+        environment: PRODUCTION ? "production" : "development",
+      });
+    }
+    try {
+      await ensureStore();
+      const [{ ok }] = await sqliteJson("SELECT 1 AS ok;");
+      return sendJson(req, res, 200, {
+        ok: Number(ok) === 1,
+        storage: USE_POSTGRES ? "postgres" : "sqlite",
+        environment: PRODUCTION ? "production" : "development",
+      });
+    } catch (error) {
+      return sendJson(req, res, 500, {
+        ok: false,
+        error: safeDatabaseError(error),
+        storage: USE_POSTGRES ? "postgres" : "sqlite",
+        environment: PRODUCTION ? "production" : "development",
+      });
+    }
   }
 
   if (pathname === "/api/session" && req.method === "GET") {

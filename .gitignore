@@ -7,6 +7,7 @@ data/remisiones.db-shm
 data/remisiones.db-wal
 data/*.tmp
 backups/
+node_modules/
 .env
 .env.production
 .vercel/
