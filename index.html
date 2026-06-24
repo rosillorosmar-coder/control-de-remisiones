@@ -439,6 +439,10 @@
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3a6.5 6.5 0 0 1 5.14 10.48l5.44 5.44-1.41 1.41-5.44-5.44A6.5 6.5 0 1 1 9.5 3Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z"/></svg>
                   <input type="search" id="paymentSearch" placeholder="Cliente, folio o referencia">
                 </label>
+                <label class="toolbar-filter">
+                  <span>Fecha</span>
+                  <input type="date" id="paymentDateFilter">
+                </label>
               </div>
               <div class="table-wrap">
                 <table>
@@ -447,6 +451,8 @@
                       <th>ID pago</th>
                       <th>Fecha</th>
                       <th>Cliente</th>
+                      <th>Clave vendedor</th>
+                      <th>Vendedor</th>
                       <th>Aplicado a</th>
                       <th>Método</th>
                       <th>Monto</th>
@@ -567,6 +573,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260623-vendedor-clientes"></script>
+    <script src="app.js?v=20260623-vendedor-pagos"></script>
   </body>
 </html>

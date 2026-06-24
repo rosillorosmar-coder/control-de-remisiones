@@ -44,6 +44,7 @@ const els = {
   importRemissionsInput: document.querySelector("#importRemissionsInput"),
   paymentRequestSearch: document.querySelector("#paymentRequestSearch"),
   paymentSearch: document.querySelector("#paymentSearch"),
+  paymentDateFilter: document.querySelector("#paymentDateFilter"),
   userSearch: document.querySelector("#userSearch"),
   clientForm: document.querySelector("#clientForm"),
   clientFormTitle: document.querySelector("#clientFormTitle"),
@@ -804,11 +805,13 @@ function renderPaymentRequestRemissions() {
 
 function renderPayments() {
   const query = els.paymentSearch.value.trim().toLowerCase();
+  const dateFilter = els.paymentDateFilter.value;
   const rows = state.payments
     .filter((payment) => {
+      if (dateFilter && payment.date !== dateFilter) return false;
       const client = clientById(payment.clientId);
       const remission = remissionById(payment.remissionId);
-      return [payment.folio, client?.name, remission?.folio, payment.method, payment.reference]
+      return [payment.folio, client?.name, client?.sellerKey, client?.sellerName, remission?.folio, payment.method, payment.reference]
         .join(" ")
         .toLowerCase()
         .includes(query);
@@ -818,12 +821,15 @@ function renderPayments() {
   els.paymentsTable.innerHTML = rows.length
     ? rows
         .map((payment) => {
+          const client = clientById(payment.clientId);
           const remission = remissionById(payment.remissionId);
           return `
             <tr>
               <td><strong>${escapeHtml(payment.folio || payment.id)}</strong></td>
               <td>${formatDate(payment.date)}</td>
-              <td>${escapeHtml(clientById(payment.clientId)?.name || "-")}</td>
+              <td>${escapeHtml(client?.name || "-")}</td>
+              <td>${escapeHtml(client?.sellerKey || "-")}</td>
+              <td>${escapeHtml(client?.sellerName || "-")}</td>
               <td>${escapeHtml(remission?.folio || "Cuenta")}</td>
               <td>${escapeHtml(payment.method)}${payment.reference ? `<br><span>${escapeHtml(payment.reference)}</span>` : ""}</td>
               <td class="money"><strong>${currency(payment.amount)}</strong></td>
@@ -836,7 +842,7 @@ function renderPayments() {
           `;
         })
         .join("")
-    : `<tr><td colspan="7"><div class="empty-state">No hay pagos con ese filtro.</div></td></tr>`;
+    : `<tr><td colspan="9"><div class="empty-state">No hay pagos con ese filtro.</div></td></tr>`;
 }
 
 function renderUsers() {
@@ -1721,7 +1727,7 @@ document.querySelector("#closeDialogButton").addEventListener("click", () => els
 document.querySelector("#changePasswordButton").addEventListener("click", () => openPasswordDialog());
 document.querySelector("#closePasswordDialogButton").addEventListener("click", () => els.passwordDialog.close());
 
-[els.clientSearch, els.agingSearch, els.remissionSearch, els.remissionStatusFilter, els.paymentRequestSearch, els.paymentSearch, els.userSearch].forEach((input) => {
+[els.clientSearch, els.agingSearch, els.remissionSearch, els.remissionStatusFilter, els.paymentRequestSearch, els.paymentSearch, els.paymentDateFilter, els.userSearch].forEach((input) => {
   input.addEventListener("input", render);
 });
 
@@ -1996,6 +2002,8 @@ document.querySelector("#exportPaymentsButton").addEventListener("click", () => 
       id_pago: payment.folio || payment.id,
       fecha: payment.date,
       cliente: clientById(payment.clientId)?.name || "",
+      clave_vendedor: clientById(payment.clientId)?.sellerKey || "",
+      vendedor: clientById(payment.clientId)?.sellerName || "",
       remision: remissionById(payment.remissionId)?.folio || "Cuenta",
       metodo: payment.method,
       referencia: payment.reference,

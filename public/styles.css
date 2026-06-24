@@ -408,6 +408,21 @@ svg {
   background: transparent;
 }
 
+.toolbar-filter {
+  width: 180px;
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.toolbar-filter input {
+  font-size: 0.9rem;
+}
+
 select,
 input,
 textarea {
