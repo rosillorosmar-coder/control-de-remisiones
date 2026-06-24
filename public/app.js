@@ -43,8 +43,9 @@ const els = {
   importRemissionsLabel: document.querySelector("#importRemissionsLabel"),
   importRemissionsInput: document.querySelector("#importRemissionsInput"),
   paymentRequestSearch: document.querySelector("#paymentRequestSearch"),
+  paymentRequestMonthFilter: document.querySelector("#paymentRequestMonthFilter"),
   paymentSearch: document.querySelector("#paymentSearch"),
-  paymentDateFilter: document.querySelector("#paymentDateFilter"),
+  paymentMonthFilter: document.querySelector("#paymentMonthFilter"),
   userSearch: document.querySelector("#userSearch"),
   clientForm: document.querySelector("#clientForm"),
   clientFormTitle: document.querySelector("#clientFormTitle"),
@@ -709,8 +710,10 @@ function renderRemissions() {
 
 function renderPaymentRequests() {
   const query = els.paymentRequestSearch.value.trim().toLowerCase();
+  const monthFilter = els.paymentRequestMonthFilter.value;
   const rows = state.paymentRequests
     .filter((request) => {
+      if (monthFilter && !String(request.date || "").startsWith(monthFilter)) return false;
       const client = clientById(request.clientId);
       const folios = (request.items || []).map((item) => remissionById(item.remissionId)?.folio).join(" ");
       return [request.folio, client?.clave, client?.name, folios, request.status, request.notes].join(" ").toLowerCase().includes(query);
@@ -805,10 +808,10 @@ function renderPaymentRequestRemissions() {
 
 function renderPayments() {
   const query = els.paymentSearch.value.trim().toLowerCase();
-  const dateFilter = els.paymentDateFilter.value;
+  const monthFilter = els.paymentMonthFilter.value;
   const rows = state.payments
     .filter((payment) => {
-      if (dateFilter && payment.date !== dateFilter) return false;
+      if (monthFilter && !String(payment.date || "").startsWith(monthFilter)) return false;
       const client = clientById(payment.clientId);
       const remission = remissionById(payment.remissionId);
       return [payment.folio, client?.name, client?.sellerKey, client?.sellerName, remission?.folio, payment.method, payment.reference]
@@ -1727,7 +1730,7 @@ document.querySelector("#closeDialogButton").addEventListener("click", () => els
 document.querySelector("#changePasswordButton").addEventListener("click", () => openPasswordDialog());
 document.querySelector("#closePasswordDialogButton").addEventListener("click", () => els.passwordDialog.close());
 
-[els.clientSearch, els.agingSearch, els.remissionSearch, els.remissionStatusFilter, els.paymentRequestSearch, els.paymentSearch, els.paymentDateFilter, els.userSearch].forEach((input) => {
+[els.clientSearch, els.agingSearch, els.remissionSearch, els.remissionStatusFilter, els.paymentRequestSearch, els.paymentRequestMonthFilter, els.paymentSearch, els.paymentMonthFilter, els.userSearch].forEach((input) => {
   input.addEventListener("input", render);
 });
 
