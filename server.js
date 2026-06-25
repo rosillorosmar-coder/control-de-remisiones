@@ -442,6 +442,7 @@ function sqlForPostgres(sql) {
 function normalizePgRows(rows) {
   const aliases = {
     clientid: "clientId",
+    remissionid: "remissionId",
     sellerkey: "sellerKey",
     sellername: "sellerName",
     deliverydate: "deliveryDate",
