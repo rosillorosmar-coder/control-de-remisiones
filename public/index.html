@@ -66,6 +66,10 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V8c0-1.1.9-2 2-2Zm0 3v2h16V9H4Zm3 5v2h5v-2H7Z"/></svg>
             Pagos
           </button>
+          <button class="nav-item" data-view="adjustments">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5V3Zm2 2v14h10V5H7Zm2 3h6v2H9V8Zm0 4h3v2H9v-2Zm5.5-.5L16 13l-3.5 3.5L11 15l2-2-2-2 1.5-1.5 2 2Z"/></svg>
+            Descuentos
+          </button>
           <button class="nav-item admin-only" data-view="users">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Zm7-4V7h-2V5h2V3h2v2h2v2h-2v3h-2Z"/></svg>
             Usuarios
@@ -133,7 +137,7 @@
                     <tr>
                       <th>Cliente</th>
                       <th>Remisiones</th>
-                      <th>Abonos</th>
+                      <th>Abonos/Ajustes</th>
                       <th>Saldo</th>
                     </tr>
                   </thead>
@@ -484,6 +488,46 @@
           </div>
         </section>
 
+        <section class="view" id="adjustmentsView">
+          <div class="content-grid">
+            <section class="panel span-12">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Ajustes autorizados</p>
+                  <h2>Descuentos y devoluciones</h2>
+                </div>
+                <button class="secondary-button small" id="exportAdjustmentsButton">CSV</button>
+              </div>
+              <div class="toolbar">
+                <label class="search-field">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3a6.5 6.5 0 0 1 5.14 10.48l5.44 5.44-1.41 1.41-5.44-5.44A6.5 6.5 0 1 1 9.5 3Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z"/></svg>
+                  <input type="search" id="adjustmentSearch" placeholder="Cliente, remisión o solicitud">
+                </label>
+                <label class="toolbar-filter">
+                  <span>Año y mes</span>
+                  <input type="month" id="adjustmentMonthFilter">
+                </label>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Cliente</th>
+                      <th>Remisión</th>
+                      <th>Solicitud</th>
+                      <th>Tipo</th>
+                      <th>Monto</th>
+                      <th>Notas</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adjustmentsTable"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
         <section class="view" id="usersView">
           <div class="split-layout">
             <section class="panel">
@@ -591,6 +635,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260625-filtros-remisiones"></script>
+    <script src="app.js?v=20260625-descuentos-devoluciones"></script>
   </body>
 </html>

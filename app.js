@@ -8,7 +8,7 @@ const uid = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(16).sl
 const currency = (value) => money.format(Number(value || 0));
 const byDateDesc = (a, b) => (b.date || "").localeCompare(a.date || "");
 
-const blankState = () => ({ clients: [], remissions: [], payments: [], paymentRequests: [] });
+const blankState = () => ({ clients: [], remissions: [], payments: [], paymentRequests: [], adjustments: [] });
 const agingBuckets = [
   { key: "days0To15", label: "0 a 15 días", min: 0, max: 15 },
   { key: "days16To30", label: "16 a 30 días", min: 16, max: 30 },
@@ -34,6 +34,7 @@ const els = {
   remissionsTable: document.querySelector("#remissionsTable"),
   paymentRequestsTable: document.querySelector("#paymentRequestsTable"),
   paymentsTable: document.querySelector("#paymentsTable"),
+  adjustmentsTable: document.querySelector("#adjustmentsTable"),
   usersTable: document.querySelector("#usersTable"),
   clientSearch: document.querySelector("#clientSearch"),
   agingSearch: document.querySelector("#agingSearch"),
@@ -49,6 +50,8 @@ const els = {
   paymentRequestMonthFilter: document.querySelector("#paymentRequestMonthFilter"),
   paymentSearch: document.querySelector("#paymentSearch"),
   paymentMonthFilter: document.querySelector("#paymentMonthFilter"),
+  adjustmentSearch: document.querySelector("#adjustmentSearch"),
+  adjustmentMonthFilter: document.querySelector("#adjustmentMonthFilter"),
   userSearch: document.querySelector("#userSearch"),
   clientForm: document.querySelector("#clientForm"),
   clientFormTitle: document.querySelector("#clientFormTitle"),
@@ -115,6 +118,7 @@ async function loadState() {
     remissions: data.remissions || [],
     payments: data.payments || [],
     paymentRequests: data.paymentRequests || [],
+    adjustments: data.adjustments || [],
   };
 }
 
@@ -139,6 +143,7 @@ async function saveState() {
       remissions: saved.remissions || [],
       payments: saved.payments || [],
       paymentRequests: saved.paymentRequests || [],
+      adjustments: saved.adjustments || [],
     };
   }
 }
@@ -250,16 +255,85 @@ function paymentsForRemission(remissionId) {
   return state.payments.filter((payment) => payment.remissionId === remissionId);
 }
 
+function adjustmentBreakdownForStoredItem(item) {
+  const base = Number(item.baseAmount || 0) || Math.max(0, remissionTotal(remissionById(item.remissionId) || {}) - remissionPaid(item.remissionId));
+  const returnsAmount = Math.min(base, Math.max(0, Number(item.returnsAmount || 0)));
+  const afterReturns = base - returnsAmount;
+  const financialAmount = afterReturns * (percentValue(item.financialDiscount) / 100);
+  const afterFinancial = afterReturns - financialAmount;
+  const commercialAmount = afterFinancial * (percentValue(item.commercialDiscount) / 100);
+  const afterCommercial = afterFinancial - commercialAmount;
+  const specialAmount = afterCommercial * (percentValue(item.specialDiscount) / 100);
+  return {
+    returnsAmount: Math.round(returnsAmount * 100) / 100,
+    financialAmount: Math.round(financialAmount * 100) / 100,
+    commercialAmount: Math.round(commercialAmount * 100) / 100,
+    specialAmount: Math.round(specialAmount * 100) / 100,
+  };
+}
+
+function effectiveAdjustments() {
+  const stored = state.adjustments || [];
+  const requestsWithStoredAdjustments = new Set(stored.map((adjustment) => adjustment.paymentRequestId).filter(Boolean));
+  const derived = (state.paymentRequests || [])
+    .filter((request) => request.status === "confirmed" && !requestsWithStoredAdjustments.has(request.id))
+    .flatMap((request) => {
+      const date = paymentRequestCollectionDate(request) || String(request.confirmedAt || "").slice(0, 10) || request.date;
+      return (request.items || []).flatMap((item) => {
+        const breakdown = adjustmentBreakdownForStoredItem(item);
+        return [
+          { type: "returns", amount: breakdown.returnsAmount },
+          { type: "financial", amount: breakdown.financialAmount },
+          { type: "commercial", amount: breakdown.commercialAmount },
+          { type: "special", amount: breakdown.specialAmount },
+        ]
+          .filter((adjustment) => adjustment.amount > 0)
+          .map((adjustment) => ({
+            id: `derived-${request.id}-${item.remissionId}-${adjustment.type}`,
+            date,
+            clientId: request.clientId,
+            remissionId: item.remissionId,
+            paymentRequestId: request.id,
+            type: adjustment.type,
+            label: adjustmentLabel(adjustment.type),
+            amount: Math.round(adjustment.amount * 100) / 100,
+            reference: request.folio || request.id,
+            notes: [request.notes, item.lineNotes].filter(Boolean).join(" | "),
+            createdAt: request.confirmedAt || "",
+            createdBy: request.confirmedBy || "",
+          }));
+      });
+    });
+  return [...stored, ...derived];
+}
+
+function adjustmentsForClient(clientId) {
+  return effectiveAdjustments().filter((adjustment) => adjustment.clientId === clientId);
+}
+
+function adjustmentsForRemission(remissionId) {
+  return effectiveAdjustments().filter((adjustment) => adjustment.remissionId === remissionId);
+}
+
 function clientTotals(clientId) {
   const charges = state.remissions
     .filter((remission) => remission.clientId === clientId)
     .reduce((sum, remission) => sum + remissionTotal(remission), 0);
   const payments = paymentsForClient(clientId).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  return { charges, payments, balance: charges - payments };
+  const adjustments = adjustmentsForClient(clientId).reduce((sum, adjustment) => sum + Number(adjustment.amount || 0), 0);
+  return { charges, payments, adjustments, balance: charges - payments - adjustments };
 }
 
 function remissionPaid(remissionId) {
   return paymentsForRemission(remissionId).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+}
+
+function remissionAdjusted(remissionId) {
+  return adjustmentsForRemission(remissionId).reduce((sum, adjustment) => sum + Number(adjustment.amount || 0), 0);
+}
+
+function remissionBalance(remission) {
+  return Math.max(0, remissionTotal(remission) - remissionPaid(remission.id) - remissionAdjusted(remission.id));
 }
 
 function remissionPaymentDate(remissionId) {
@@ -280,9 +354,10 @@ function paymentRequestCollectionDate(request) {
 
 function remissionStatus(remission) {
   const paid = remissionPaid(remission.id);
+  const adjusted = remissionAdjusted(remission.id);
   const total = remissionTotal(remission);
-  if (paid >= total && total > 0) return "paid";
-  if (paid > 0) return "partial";
+  if (paid + adjusted >= total && total > 0) return "paid";
+  if (paid + adjusted > 0) return "partial";
   return "pending";
 }
 
@@ -291,6 +366,15 @@ function requestStatusLabel(status) {
     pending: "Pendiente",
     confirmed: "Confirmada",
   }[status] || status;
+}
+
+function adjustmentLabel(type) {
+  return {
+    returns: "Devolución",
+    financial: "Descuento financiero",
+    commercial: "Descuento comercial",
+    special: "Descuento especial",
+  }[type] || "Descuento";
 }
 
 function percentValue(value) {
@@ -303,7 +387,7 @@ function requestLineBase(item) {
   if (item.baseAmount !== undefined && item.baseAmount !== null && item.baseAmount !== "") return Number(item.baseAmount || 0);
   const remission = remissionById(item.remissionId);
   if (!remission) return 0;
-  return Math.max(0, remissionTotal(remission) - remissionPaid(remission.id));
+  return remissionBalance(remission);
 }
 
 function requestLineAmount(item) {
@@ -368,7 +452,7 @@ function agingRows() {
   const rows = new Map();
 
   state.remissions.forEach((remission) => {
-    const balance = Math.max(0, remissionTotal(remission) - remissionPaid(remission.id));
+    const balance = remissionBalance(remission);
     if (balance <= 0) return;
 
     const client = clientById(remission.clientId);
@@ -454,6 +538,7 @@ function setView(view) {
     aging: "Antigüedad",
     paymentRequests: "Solicitudes de pago",
     payments: "Pagos",
+    adjustments: "Descuentos y devoluciones",
     users: "Usuarios",
   };
 
@@ -471,6 +556,7 @@ function render() {
   renderRemissions();
   renderPaymentRequests();
   renderPayments();
+  renderAdjustments();
   renderUsers();
 }
 
@@ -500,7 +586,7 @@ function renderPaymentRemissionOptions() {
     .filter((remission) => remission.clientId === clientId)
     .sort(byDateDesc)
     .map((remission) => {
-      const balance = remissionTotal(remission) - remissionPaid(remission.id);
+      const balance = remissionBalance(remission);
       return `<option value="${remission.id}">${escapeHtml(remission.folio)} · saldo ${currency(balance)}</option>`;
     })
     .join("");
@@ -511,7 +597,8 @@ function renderPaymentRemissionOptions() {
 function renderDashboard() {
   const charges = state.remissions.reduce((sum, remission) => sum + remissionTotal(remission), 0);
   const payments = state.payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  const balance = charges - payments;
+  const adjustments = effectiveAdjustments().reduce((sum, adjustment) => sum + Number(adjustment.amount || 0), 0);
+  const balance = charges - payments - adjustments;
   const pendingRemissions = state.remissions.filter((remission) => remissionStatus(remission) !== "paid").length;
 
   const metrics = [
@@ -519,6 +606,7 @@ function renderDashboard() {
     ["Remisiones", state.remissions.length],
     ["Pendientes", pendingRemissions],
     ["Cobrado", currency(payments)],
+    ["Desc. y dev.", currency(adjustments)],
   ];
 
   els.metricsGrid.innerHTML = metrics
@@ -533,11 +621,11 @@ function renderDashboard() {
   els.balanceTable.innerHTML = balances.length
     ? balances
         .map(
-          ({ client, charges, payments, balance }) => `
+          ({ client, charges, payments, adjustments, balance }) => `
           <tr>
             <td><strong>${escapeHtml(client.clave || client.id)}</strong><br><span>${escapeHtml(client.name)}</span></td>
             <td class="money">${currency(charges)}</td>
-            <td class="money">${currency(payments)}</td>
+            <td class="money">${currency(payments + adjustments)}</td>
             <td class="money"><strong>${currency(balance)}</strong></td>
           </tr>
         `,
@@ -694,7 +782,8 @@ function renderRemissions() {
     ? rows
         .map((remission) => {
           const total = remissionTotal(remission);
-          const paid = remissionPaid(remission.id);
+          const adjusted = remissionAdjusted(remission.id);
+          const balance = remissionBalance(remission);
           const statusName = remissionStatus(remission);
           const client = clientById(remission.clientId);
           const deliveryDate = deliveryDateFor(remission);
@@ -709,7 +798,7 @@ function renderRemissions() {
               <td>${formatDate(paymentDate)}</td>
               <td>${daysSince(deliveryDate)}</td>
               <td class="money">${currency(total)}</td>
-              <td class="money"><strong>${currency(total - paid)}</strong></td>
+              <td class="money"><strong>${currency(balance)}</strong>${adjusted ? `<br><span>Ajustes: ${currency(adjusted)}</span>` : ""}</td>
               <td><span class="badge ${statusName}">${statusLabel(statusName)}</span></td>
               <td>
                 <div class="row-actions">
@@ -799,7 +888,7 @@ function renderPaymentRequestRemissions() {
       </div>
       ${remissions
         .map((remission) => {
-          const balance = remissionTotal(remission) - remissionPaid(remission.id);
+          const balance = remissionBalance(remission);
           return `
             <div class="request-line" data-remission-id="${remission.id}" data-balance="${balance}">
               <label class="check-line">
@@ -867,6 +956,47 @@ function renderPayments() {
         })
         .join("")
     : `<tr><td colspan="9"><div class="empty-state">No hay pagos con ese filtro.</div></td></tr>`;
+}
+
+function renderAdjustments() {
+  const query = els.adjustmentSearch.value.trim().toLowerCase();
+  const monthFilter = els.adjustmentMonthFilter.value;
+  const rows = effectiveAdjustments()
+    .filter((adjustment) => {
+      if (monthFilter && !String(adjustment.date || "").startsWith(monthFilter)) return false;
+      const client = clientById(adjustment.clientId);
+      const remission = remissionById(adjustment.remissionId);
+      const text = [
+        adjustment.reference,
+        adjustment.label,
+        adjustment.notes,
+        client?.clave,
+        client?.name,
+        remission?.folio,
+      ].join(" ").toLowerCase();
+      return text.includes(query);
+    })
+    .sort(byDateDesc);
+
+  els.adjustmentsTable.innerHTML = rows.length
+    ? rows
+        .map((adjustment) => {
+          const client = clientById(adjustment.clientId);
+          const remission = remissionById(adjustment.remissionId);
+          return `
+            <tr>
+              <td>${formatDate(adjustment.date)}</td>
+              <td><strong>${escapeHtml(client?.clave || "-")}</strong><br><span>${escapeHtml(client?.name || "-")}</span></td>
+              <td>${escapeHtml(remission?.folio || "-")}</td>
+              <td>${escapeHtml(adjustment.reference || "-")}</td>
+              <td>${escapeHtml(adjustment.label || adjustmentLabel(adjustment.type))}</td>
+              <td class="money"><strong>${currency(adjustment.amount)}</strong></td>
+              <td>${escapeHtml(adjustment.notes || "-")}</td>
+            </tr>
+          `;
+        })
+        .join("")
+    : `<tr><td colspan="7"><div class="empty-state">No hay descuentos o devoluciones con ese filtro.</div></td></tr>`;
 }
 
 function renderUsers() {
@@ -1024,7 +1154,8 @@ function editUser(id) {
 async function deleteClient(id) {
   const hasMovements =
     state.remissions.some((remission) => remission.clientId === id) ||
-    state.payments.some((payment) => payment.clientId === id);
+    state.payments.some((payment) => payment.clientId === id) ||
+    effectiveAdjustments().some((adjustment) => adjustment.clientId === id);
 
   if (hasMovements) {
     toast("No se puede eliminar un cliente con movimientos");
@@ -1040,8 +1171,8 @@ async function deleteClient(id) {
 }
 
 async function deleteRemission(id) {
-  if (state.payments.some((payment) => payment.remissionId === id)) {
-    toast("No se puede eliminar una remisión con pagos");
+  if (state.payments.some((payment) => payment.remissionId === id) || effectiveAdjustments().some((adjustment) => adjustment.remissionId === id)) {
+    toast("No se puede eliminar una remisión con pagos o ajustes");
     return;
   }
 
@@ -1110,6 +1241,8 @@ function showRemissionDetail(id) {
   if (!remission) return;
   const client = clientById(remission.clientId);
   const paid = remissionPaid(id);
+  const adjusted = remissionAdjusted(id);
+  const balance = remissionBalance(remission);
   const total = remissionTotal(remission);
   const deliveryDate = deliveryDateFor(remission);
   const paymentDate = remissionPaymentDate(id);
@@ -1123,7 +1256,9 @@ function showRemissionDetail(id) {
       <div class="detail-card"><span>Fecha pago</span><strong>${formatDate(paymentDate)}</strong></div>
       <div class="detail-card"><span>Días</span><strong>${daysSince(deliveryDate)}</strong></div>
       <div class="detail-card"><span>Total</span><strong>${currency(total)}</strong></div>
-      <div class="detail-card"><span>Saldo</span><strong>${currency(total - paid)}</strong></div>
+      <div class="detail-card"><span>Pagado</span><strong>${currency(paid)}</strong></div>
+      <div class="detail-card"><span>Descuentos/dev.</span><strong>${currency(adjusted)}</strong></div>
+      <div class="detail-card"><span>Saldo</span><strong>${currency(balance)}</strong></div>
     </div>
     ${remission.notes ? `<p class="detail-note">${escapeHtml(remission.notes)}</p>` : ""}
   `;
@@ -1384,6 +1519,28 @@ async function confirmPaymentRequest(id) {
       };
     })
     .filter((payment) => payment.amount > 0);
+  const adjustments = paymentRequestRows(request)
+    .flatMap(({ item, breakdown }) => [
+      { type: "returns", amount: breakdown.returnsAmount },
+      { type: "financial", amount: breakdown.financialAmount },
+      { type: "commercial", amount: breakdown.commercialAmount },
+      { type: "special", amount: breakdown.specialAmount },
+    ]
+      .filter((adjustment) => adjustment.amount > 0)
+      .map((adjustment) => ({
+        id: uid("adj"),
+        date: collectionDate,
+        clientId: request.clientId,
+        remissionId: item.remissionId,
+        paymentRequestId: request.id,
+        type: adjustment.type,
+        label: adjustmentLabel(adjustment.type),
+        amount: Math.round(adjustment.amount * 100) / 100,
+        reference: request.folio || request.id,
+        notes: [request.notes, item.lineNotes].filter(Boolean).join(" | "),
+        createdAt: new Date().toISOString(),
+        createdBy: currentUser?.username || "",
+      })));
 
   const index = state.paymentRequests.findIndex((item) => item.id === id);
   state.paymentRequests[index] = {
@@ -1394,6 +1551,7 @@ async function confirmPaymentRequest(id) {
     receivedAmount,
   };
   state.payments.push(...payments);
+  state.adjustments.push(...adjustments);
   await saveState();
   render();
   toast("Solicitud confirmada y pagos aplicados");
@@ -1751,7 +1909,7 @@ document.querySelector("#closeDialogButton").addEventListener("click", () => els
 document.querySelector("#changePasswordButton").addEventListener("click", () => openPasswordDialog());
 document.querySelector("#closePasswordDialogButton").addEventListener("click", () => els.passwordDialog.close());
 
-[els.clientSearch, els.agingSearch, els.remissionSearch, els.remissionStatusFilter, els.remissionClientFilter, els.remissionDateFromFilter, els.remissionDateToFilter, els.paymentRequestSearch, els.paymentRequestMonthFilter, els.paymentSearch, els.paymentMonthFilter, els.userSearch].forEach((input) => {
+[els.clientSearch, els.agingSearch, els.remissionSearch, els.remissionStatusFilter, els.remissionClientFilter, els.remissionDateFromFilter, els.remissionDateToFilter, els.paymentRequestSearch, els.paymentRequestMonthFilter, els.paymentSearch, els.paymentMonthFilter, els.adjustmentSearch, els.adjustmentMonthFilter, els.userSearch].forEach((input) => {
   input.addEventListener("input", render);
   input.addEventListener("change", render);
 });
@@ -1960,7 +2118,8 @@ document.querySelector("#exportRemissionsButton").addEventListener("click", () =
       cliente: clientById(remission.clientId)?.name || "",
       total: remissionTotal(remission),
       pagado: remissionPaid(remission.id),
-      saldo: remissionTotal(remission) - remissionPaid(remission.id),
+      descuentos_devoluciones: remissionAdjusted(remission.id),
+      saldo: remissionBalance(remission),
       estado: statusLabel(remissionStatus(remission)),
     })),
   );
@@ -2046,6 +2205,23 @@ document.querySelector("#exportPaymentsButton").addEventListener("click", () => 
   );
 });
 
+document.querySelector("#exportAdjustmentsButton").addEventListener("click", () => {
+  exportCsv(
+    "descuentos-devoluciones.csv",
+    effectiveAdjustments().map((adjustment) => ({
+      fecha: adjustment.date,
+      clave_cliente: clientById(adjustment.clientId)?.clave || "",
+      cliente: clientById(adjustment.clientId)?.name || "",
+      remision: remissionById(adjustment.remissionId)?.folio || "",
+      solicitud: adjustment.reference || "",
+      tipo: adjustment.label || adjustmentLabel(adjustment.type),
+      monto: adjustment.amount,
+      notas: adjustment.notes || "",
+      creado_por: adjustment.createdBy || "",
+    })),
+  );
+});
+
 document.querySelector("#exportJsonButton").addEventListener("click", () => {
   const payload = encodeURIComponent(JSON.stringify(state, null, 2));
   download(`respaldo-remisiones-${today()}.json`, `data:application/json;charset=utf-8,${payload}`);
@@ -2067,6 +2243,7 @@ document.querySelector("#importJsonInput").addEventListener("change", async (eve
       remissions: imported.remissions || [],
       payments: imported.payments || [],
       paymentRequests: imported.paymentRequests || [],
+      adjustments: imported.adjustments || [],
     };
     await saveState();
     resetClientForm();

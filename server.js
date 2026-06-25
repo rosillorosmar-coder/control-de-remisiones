@@ -35,7 +35,7 @@ const execFileAsync = promisify(execFile);
 let storeReadyPromise = null;
 let pgPool = null;
 
-const blankBusinessData = () => ({ clients: [], remissions: [], payments: [], paymentRequests: [] });
+const blankBusinessData = () => ({ clients: [], remissions: [], payments: [], paymentRequests: [], adjustments: [] });
 
 async function ensureStore() {
   if (!storeReadyPromise) storeReadyPromise = initializeStore();
@@ -101,6 +101,21 @@ async function initializeStore() {
       notes TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS discounts_returns (
+      id TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      remission_id TEXT NOT NULL,
+      payment_request_id TEXT,
+      date TEXT NOT NULL,
+      type TEXT NOT NULL,
+      label TEXT,
+      amount REAL NOT NULL DEFAULT 0,
+      reference TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      created_by TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS payment_requests (
       id TEXT PRIMARY KEY,
       folio TEXT,
@@ -147,7 +162,7 @@ async function initializeStore() {
 
 async function readStore() {
   await ensureStore();
-  const [clients, remissions, payments, paymentRequests, users] = await Promise.all([
+  const [clients, remissions, payments, paymentRequests, adjustments, users] = await Promise.all([
     sqliteJson("SELECT id, clave, name, contact, seller_key AS sellerKey, seller_name AS sellerName, phone, address, notes FROM clients ORDER BY name;"),
     sqliteJson("SELECT id, folio, client_id AS clientId, date, delivery_date AS deliveryDate, total, notes, items_json AS itemsJson FROM remissions ORDER BY date DESC, folio;"),
     sqliteJson("SELECT id, folio, client_id AS clientId, remission_id AS remissionId, date, amount, method, reference, notes FROM payments ORDER BY date DESC;"),
@@ -166,6 +181,23 @@ async function readStore() {
         confirmed_by AS confirmedBy,
         received_amount AS receivedAmount
       FROM payment_requests
+      ORDER BY date DESC, id DESC;
+    `),
+    sqliteJson(`
+      SELECT
+        id,
+        client_id AS clientId,
+        remission_id AS remissionId,
+        payment_request_id AS paymentRequestId,
+        date,
+        type,
+        label,
+        amount,
+        reference,
+        notes,
+        created_at AS createdAt,
+        created_by AS createdBy
+      FROM discounts_returns
       ORDER BY date DESC, id DESC;
     `),
     sqliteJson(`
@@ -230,6 +262,18 @@ async function readStore() {
       confirmedBy: request.confirmedBy || "",
       receivedAmount: Number(request.receivedAmount || 0),
     })),
+    adjustments: adjustments.map((adjustment) => ({
+      ...adjustment,
+      remissionId: adjustment.remissionId || "",
+      paymentRequestId: adjustment.paymentRequestId || "",
+      type: adjustment.type || "discount",
+      label: adjustment.label || "Descuento",
+      amount: Number(adjustment.amount || 0),
+      reference: adjustment.reference || "",
+      notes: adjustment.notes || "",
+      createdAt: adjustment.createdAt || "",
+      createdBy: adjustment.createdBy || "",
+    })),
     users: users.map((user) => ({
       ...user,
       mustChangePassword: Boolean(user.mustChangePassword),
@@ -245,6 +289,7 @@ async function writeStore(store) {
   const sql = [
     "BEGIN IMMEDIATE;",
     "DELETE FROM payments;",
+    "DELETE FROM discounts_returns;",
     "DELETE FROM payment_requests;",
     "DELETE FROM remissions;",
     "DELETE FROM clients;",
@@ -322,6 +367,23 @@ async function writeStore(store) {
         ${sqlNumber(request.receivedAmount || 0)}
       );
     `),
+    ...(store.adjustments || []).map((adjustment) => `
+      INSERT INTO discounts_returns (id, client_id, remission_id, payment_request_id, date, type, label, amount, reference, notes, created_at, created_by)
+      VALUES (
+        ${sqlValue(adjustment.id)},
+        ${sqlValue(adjustment.clientId)},
+        ${sqlValue(adjustment.remissionId || "")},
+        ${sqlValue(adjustment.paymentRequestId || "")},
+        ${sqlValue(adjustment.date)},
+        ${sqlValue(adjustment.type || "discount")},
+        ${sqlValue(adjustment.label || "Descuento")},
+        ${sqlNumber(adjustment.amount || 0)},
+        ${sqlValue(adjustment.reference || "")},
+        ${sqlValue(adjustment.notes || "")},
+        ${sqlValue(adjustment.createdAt || new Date().toISOString())},
+        ${sqlValue(adjustment.createdBy || "")}
+      );
+    `),
     "COMMIT;",
   ].join("\n");
 
@@ -376,6 +438,7 @@ async function readJsonStoreIfPresent() {
       remissions: parsed.remissions || [],
       payments: parsed.payments || [],
       paymentRequests: parsed.paymentRequests || [],
+      adjustments: parsed.adjustments || [],
       users: parsed.users || [],
     };
   } catch {
@@ -445,6 +508,7 @@ function normalizePgRows(rows) {
     remissionid: "remissionId",
     sellerkey: "sellerKey",
     sellername: "sellerName",
+    paymentrequestid: "paymentRequestId",
     deliverydate: "deliveryDate",
     itemsjson: "itemsJson",
     passwordhash: "passwordHash",
@@ -814,15 +878,16 @@ function changedSections(store, incoming) {
     remissions: !sameData(store.remissions, incoming.remissions),
     payments: !sameData(store.payments, incoming.payments),
     paymentRequests: !sameData(store.paymentRequests, incoming.paymentRequests),
+    adjustments: !sameData(store.adjustments, incoming.adjustments),
   };
 }
 
 function canUpdateState(role, changes) {
-  if (!changes.clients && !changes.remissions && !changes.payments && !changes.paymentRequests) return true;
+  if (!changes.clients && !changes.remissions && !changes.payments && !changes.paymentRequests && !changes.adjustments) return true;
   if (role === "admin") return true;
-  if (role === "consulta") return !changes.clients && !changes.remissions && !changes.payments && !changes.paymentRequests;
-  if (role === "captura") return (changes.clients || changes.remissions || changes.paymentRequests) && !changes.payments;
-  if (role === "cobranza") return (changes.payments || changes.paymentRequests) && !changes.clients && !changes.remissions;
+  if (role === "consulta") return !changes.clients && !changes.remissions && !changes.payments && !changes.paymentRequests && !changes.adjustments;
+  if (role === "captura") return (changes.clients || changes.remissions || changes.paymentRequests) && !changes.payments && !changes.adjustments;
+  if (role === "cobranza") return (changes.payments || changes.paymentRequests || changes.adjustments) && !changes.clients && !changes.remissions;
   return false;
 }
 
@@ -1052,6 +1117,7 @@ async function handleApi(req, res, pathname) {
       remissions: store.remissions,
       payments: store.payments,
       paymentRequests: store.paymentRequests,
+      adjustments: store.adjustments,
     });
   }
 
@@ -1063,6 +1129,7 @@ async function handleApi(req, res, pathname) {
       remissions: incoming.remissions || [],
       payments: incoming.payments || [],
       paymentRequests: incoming.paymentRequests || [],
+      adjustments: incoming.adjustments || [],
     };
     const changes = changedSections(store, nextState);
 
@@ -1083,6 +1150,7 @@ async function handleApi(req, res, pathname) {
       remissions: saved.remissions,
       payments: saved.payments,
       paymentRequests: saved.paymentRequests,
+      adjustments: saved.adjustments,
     });
   }
 
