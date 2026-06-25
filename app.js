@@ -94,7 +94,14 @@ async function apiRequest(url, options = {}) {
   });
 
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "No se pudo completar la operación");
+  if (!response.ok) {
+    const error = new Error(data.error || "No se pudo completar la operación");
+    error.status = response.status;
+    if (response.status === 401 && currentUser && url !== "/api/session") {
+      showLogin("Tu sesión venció. Inicia sesión de nuevo para continuar.");
+    }
+    throw error;
+  }
   return data;
 }
 
@@ -1986,13 +1993,22 @@ els.importRemissionsInput.addEventListener("change", async (event) => {
     }
 
     if (!confirm(`Se importarán ${remissions.length} remisiones. ¿Continuar?`)) return;
-    state.remissions.push(...remissions);
-    await saveState();
+    const previousRemissions = [...state.remissions];
+    state.remissions = [...state.remissions, ...remissions];
+    try {
+      await saveState();
+    } catch (error) {
+      state.remissions = previousRemissions;
+      throw error;
+    }
     resetRemissionForm();
     render();
     toast(`${remissions.length} remisiones importadas`);
   } catch (error) {
-    alert(`No se pudo importar la plantilla:\n\n${error.message}`);
+    const message = error.status === 401 || error.message === "No autorizado"
+      ? "Tu sesión venció o no está activa. Inicia sesión de nuevo y vuelve a cargar la plantilla."
+      : error.message;
+    alert(`No se pudo importar la plantilla:\n\n${message}`);
   } finally {
     event.target.value = "";
   }
