@@ -39,6 +39,9 @@ const els = {
   agingSearch: document.querySelector("#agingSearch"),
   remissionSearch: document.querySelector("#remissionSearch"),
   remissionStatusFilter: document.querySelector("#remissionStatusFilter"),
+  remissionClientFilter: document.querySelector("#remissionClientFilter"),
+  remissionDateFromFilter: document.querySelector("#remissionDateFromFilter"),
+  remissionDateToFilter: document.querySelector("#remissionDateToFilter"),
   downloadRemissionTemplateButton: document.querySelector("#downloadRemissionTemplateButton"),
   importRemissionsLabel: document.querySelector("#importRemissionsLabel"),
   importRemissionsInput: document.querySelector("#importRemissionsInput"),
@@ -472,6 +475,7 @@ function render() {
 }
 
 function renderSelects() {
+  const selectedRemissionClientFilter = els.remissionClientFilter.value || "all";
   const clientOptions = state.clients
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name, "es"))
@@ -480,6 +484,10 @@ function renderSelects() {
 
   els.remissionClient.innerHTML = clientOptions || '<option value="">Agrega un cliente</option>';
   els.paymentRequestClient.innerHTML = clientOptions || '<option value="">Agrega un cliente</option>';
+  els.remissionClientFilter.innerHTML = `<option value="all">Todos los clientes</option>${clientOptions}`;
+  els.remissionClientFilter.value = state.clients.some((client) => client.id === selectedRemissionClientFilter)
+    ? selectedRemissionClientFilter
+    : "all";
   if (els.paymentClient) els.paymentClient.innerHTML = clientOptions || '<option value="">Agrega un cliente</option>';
   renderPaymentRequestRemissions();
   renderPaymentRemissionOptions();
@@ -666,13 +674,19 @@ function renderClients() {
 function renderRemissions() {
   const query = els.remissionSearch.value.trim().toLowerCase();
   const status = els.remissionStatusFilter.value;
+  const clientFilter = els.remissionClientFilter.value;
+  const dateFrom = els.remissionDateFromFilter.value;
+  const dateTo = els.remissionDateToFilter.value;
   const rows = state.remissions
     .filter((remission) => {
       const client = clientById(remission.clientId);
       const text = [remission.folio, client?.clave, client?.name, remission.notes].join(" ").toLowerCase();
       const matchesText = text.includes(query);
       const matchesStatus = status === "all" || remissionStatus(remission) === status;
-      return matchesText && matchesStatus;
+      const matchesClient = clientFilter === "all" || remission.clientId === clientFilter;
+      const matchesDateFrom = !dateFrom || String(remission.date || "") >= dateFrom;
+      const matchesDateTo = !dateTo || String(remission.date || "") <= dateTo;
+      return matchesText && matchesStatus && matchesClient && matchesDateFrom && matchesDateTo;
     })
     .sort(byDateDesc);
 
@@ -1737,8 +1751,9 @@ document.querySelector("#closeDialogButton").addEventListener("click", () => els
 document.querySelector("#changePasswordButton").addEventListener("click", () => openPasswordDialog());
 document.querySelector("#closePasswordDialogButton").addEventListener("click", () => els.passwordDialog.close());
 
-[els.clientSearch, els.agingSearch, els.remissionSearch, els.remissionStatusFilter, els.paymentRequestSearch, els.paymentRequestMonthFilter, els.paymentSearch, els.paymentMonthFilter, els.userSearch].forEach((input) => {
+[els.clientSearch, els.agingSearch, els.remissionSearch, els.remissionStatusFilter, els.remissionClientFilter, els.remissionDateFromFilter, els.remissionDateToFilter, els.paymentRequestSearch, els.paymentRequestMonthFilter, els.paymentSearch, els.paymentMonthFilter, els.userSearch].forEach((input) => {
   input.addEventListener("input", render);
+  input.addEventListener("change", render);
 });
 
 els.paymentRequestClient.addEventListener("change", renderPaymentRequestRemissions);
