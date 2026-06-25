@@ -365,6 +365,7 @@ function requestStatusLabel(status) {
   return {
     pending: "Pendiente",
     confirmed: "Confirmada",
+    canceled: "Cancelada",
   }[status] || status;
 }
 
@@ -826,7 +827,7 @@ function renderPaymentRequests() {
       if (monthFilter && !String(request.date || "").startsWith(monthFilter)) return false;
       const client = clientById(request.clientId);
       const folios = (request.items || []).map((item) => remissionById(item.remissionId)?.folio).join(" ");
-      return [request.folio, client?.clave, client?.name, folios, request.status, request.notes].join(" ").toLowerCase().includes(query);
+      return [request.folio, client?.clave, client?.name, folios, request.status, requestStatusLabel(request.status), request.notes].join(" ").toLowerCase().includes(query);
     })
     .sort(byDateDesc);
 
@@ -853,6 +854,11 @@ function renderPaymentRequests() {
                       ? `<button type="button" data-action="confirm-payment-request" data-id="${request.id}">Confirmar</button>`
                       : ""
                   }
+                  ${
+                    status === "pending" && can("editPaymentRequests")
+                      ? `<button type="button" data-action="cancel-payment-request" data-id="${request.id}">Cancelar</button>`
+                      : ""
+                  }
                 </div>
               </td>
             </tr>
@@ -862,11 +868,20 @@ function renderPaymentRequests() {
     : `<tr><td colspan="7"><div class="empty-state">No hay solicitudes con ese filtro.</div></td></tr>`;
 }
 
+function pendingRequestedRemissionIds() {
+  return new Set(
+    state.paymentRequests
+      .filter((request) => (request.status || "pending") === "pending")
+      .flatMap((request) => (request.items || []).map((item) => item.remissionId)),
+  );
+}
+
 function renderPaymentRequestRemissions() {
   if (!els.paymentRequestRemissions) return;
   const clientId = els.paymentRequestClient.value || state.clients[0]?.id || "";
+  const blockedRemissions = pendingRequestedRemissionIds();
   const remissions = state.remissions
-    .filter((remission) => remission.clientId === clientId && remissionStatus(remission) !== "paid")
+    .filter((remission) => remission.clientId === clientId && remissionStatus(remission) !== "paid" && !blockedRemissions.has(remission.id))
     .sort(byDateDesc);
 
   els.paymentRequestRemissions.innerHTML = remissions.length
@@ -1557,6 +1572,23 @@ async function confirmPaymentRequest(id) {
   toast("Solicitud confirmada y pagos aplicados");
 }
 
+async function cancelPaymentRequest(id) {
+  if (!can("editPaymentRequests")) return toast("Tu rol no puede cancelar solicitudes");
+  const request = paymentRequestById(id);
+  if (!request || (request.status || "pending") !== "pending") return;
+  if (!confirm(`¿Cancelar la solicitud ${request.folio || request.id}? Las remisiones seleccionadas quedarán disponibles.`)) return;
+
+  const index = state.paymentRequests.findIndex((item) => item.id === id);
+  state.paymentRequests[index] = {
+    ...request,
+    status: "canceled",
+  };
+  await saveState();
+  resetPaymentRequestForm();
+  render();
+  toast("Solicitud cancelada");
+}
+
 function exportCsv(filename, rows) {
   if (!rows.length) {
     toast("No hay datos para exportar");
@@ -1861,6 +1893,7 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "delete-payment" && !can("editPayments")) return toast("Tu rol no puede modificar pagos");
   if (action === "confirm-payment-request" && !can("confirmPaymentRequests")) return toast("Tu rol no puede confirmar solicitudes");
+  if (action === "cancel-payment-request" && !can("editPaymentRequests")) return toast("Tu rol no puede cancelar solicitudes");
   if (action === "edit-user" && !can("manageUsers")) return toast("Solo el administrador puede modificar usuarios");
 
   if (action === "edit-client") editClient(id);
@@ -1872,6 +1905,7 @@ document.addEventListener("click", async (event) => {
   if (action === "detail-payment-request") showPaymentRequestDetail(id);
   if (action === "pdf-payment-request") openPaymentRequestPdf(id);
   if (action === "confirm-payment-request") await confirmPaymentRequest(id);
+  if (action === "cancel-payment-request") await cancelPaymentRequest(id);
   if (action === "edit-user") editUser(id);
   if (action === "delete-payment") {
     if (!confirm("¿Eliminar este pago?")) return;

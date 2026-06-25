@@ -525,6 +525,11 @@ tr:last-child td {
   background: #e5f4ea;
 }
 
+.badge.canceled {
+  color: #66736b;
+  background: #edf1ee;
+}
+
 .role-pill {
   display: inline-flex;
   align-items: center;
