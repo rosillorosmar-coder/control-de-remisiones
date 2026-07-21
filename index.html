@@ -550,6 +550,7 @@
                 <select id="cashReceptionStatusFilter" aria-label="Filtrar recepción">
                   <option value="all">Todas</option>
                   <option value="pending">Pendientes</option>
+                  <option value="partial">Parciales</option>
                   <option value="received">Recibidas</option>
                 </select>
                 <label class="toolbar-filter">
@@ -564,7 +565,8 @@
                       <th>Folio</th>
                       <th>Fecha cobro</th>
                       <th>Cliente</th>
-                      <th>Monto</th>
+                      <th>Monto cobrado</th>
+                      <th>Monto recibido</th>
                       <th>Confirmó</th>
                       <th>Recepción</th>
                       <th>Observación</th>
@@ -686,6 +688,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260721-recepcion-efectivo"></script>
+    <script src="app.js?v=20260721-monto-recepcion"></script>
   </body>
 </html>

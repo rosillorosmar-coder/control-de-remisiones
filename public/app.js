@@ -358,7 +358,11 @@ function paymentRequestCollectionDate(request) {
 }
 
 function cashReceptionStatus(request) {
-  return request.cashReceivedAt ? "received" : "pending";
+  const charged = Number(request.receivedAmount || 0);
+  const received = Number(request.cashReceivedAmount || 0);
+  if (received >= charged && charged > 0) return "received";
+  if (received > 0) return "partial";
+  return "pending";
 }
 
 function remissionStatus(remission) {
@@ -1035,7 +1039,8 @@ function renderCashReception() {
     .filter((request) => {
       const status = cashReceptionStatus(request);
       const collectionDate = paymentRequestCollectionDate(request);
-      if (statusFilter !== "all" && status !== statusFilter) return false;
+      if (statusFilter === "pending" && status === "received") return false;
+      if (statusFilter !== "all" && statusFilter !== "pending" && status !== statusFilter) return false;
       if (monthFilter && !String(collectionDate || request.confirmedAt || request.date || "").startsWith(monthFilter)) return false;
       const client = clientById(request.clientId);
       const text = [
@@ -1049,8 +1054,9 @@ function renderCashReception() {
       return text.includes(query);
     })
     .sort((a, b) => {
-      const aStatus = cashReceptionStatus(a) === "pending" ? 0 : 1;
-      const bStatus = cashReceptionStatus(b) === "pending" ? 0 : 1;
+      const statusOrder = { pending: 0, partial: 1, received: 2 };
+      const aStatus = statusOrder[cashReceptionStatus(a)] ?? 3;
+      const bStatus = statusOrder[cashReceptionStatus(b)] ?? 3;
       if (aStatus !== bStatus) return aStatus - bStatus;
       return byDateDesc(a, b);
     });
@@ -1061,20 +1067,22 @@ function renderCashReception() {
           const client = clientById(request.clientId);
           const status = cashReceptionStatus(request);
           const collectionDate = paymentRequestCollectionDate(request);
+          const pendingAmount = Math.max(0, Number(request.receivedAmount || 0) - Number(request.cashReceivedAmount || 0));
           return `
             <tr>
               <td><strong>${escapeHtml(request.folio || request.id)}</strong></td>
               <td>${formatDate(collectionDate)}</td>
               <td><strong>${escapeHtml(client?.clave || "-")}</strong><br><span>${escapeHtml(client?.name || "-")}</span></td>
               <td class="money"><strong>${currency(request.receivedAmount || 0)}</strong></td>
+              <td class="money"><strong>${currency(request.cashReceivedAmount || 0)}</strong>${pendingAmount ? `<br><span>Falta: ${currency(pendingAmount)}</span>` : ""}</td>
               <td>${escapeHtml(request.confirmedBy || "-")}</td>
-              <td><span class="badge ${status}">${status === "received" ? "Recibida" : "Pendiente"}</span>${request.cashReceivedAt ? `<br><span>${formatDate(request.cashReceivedAt)} · ${escapeHtml(request.cashReceivedBy || "-")}</span>` : ""}</td>
+              <td><span class="badge ${status}">${status === "received" ? "Recibida" : status === "partial" ? "Parcial" : "Pendiente"}</span>${request.cashReceivedAt ? `<br><span>${formatDate(request.cashReceivedAt)} · ${escapeHtml(request.cashReceivedBy || "-")}</span>` : ""}</td>
               <td>${escapeHtml(request.cashReceivedNotes || "-")}</td>
               <td>
                 <div class="row-actions">
                   ${
-                    status === "pending" && can("receiveCash")
-                      ? `<button type="button" data-action="receive-cash" data-id="${request.id}">Recibir</button>`
+                    status !== "received" && can("receiveCash")
+                      ? `<button type="button" data-action="receive-cash" data-id="${request.id}">${status === "partial" ? "Actualizar" : "Recibir"}</button>`
                       : ""
                   }
                 </div>
@@ -1083,7 +1091,7 @@ function renderCashReception() {
           `;
         })
         .join("")
-    : `<tr><td colspan="8"><div class="empty-state">No hay folios confirmados con ese filtro.</div></td></tr>`;
+    : `<tr><td colspan="9"><div class="empty-state">No hay folios confirmados con ese filtro.</div></td></tr>`;
 }
 
 function renderUsers() {
@@ -1387,6 +1395,7 @@ function showPaymentRequestDetail(id) {
       <div class="detail-card"><span>Monto cobrado</span><strong>${currency(request.receivedAmount || 0)}</strong></div>
       <div class="detail-card"><span>Fecha cobro</span><strong>${formatDate(collectionDate)}</strong></div>
       <div class="detail-card"><span>Confirmada por</span><strong>${escapeHtml(request.confirmedBy || "-")}</strong></div>
+      <div class="detail-card"><span>Monto recibido Finanzas</span><strong>${currency(request.cashReceivedAmount || 0)}</strong></div>
       <div class="detail-card"><span>Recepción Finanzas</span><strong>${request.cashReceivedAt ? formatDate(request.cashReceivedAt) : "Pendiente"}</strong></div>
       <div class="detail-card"><span>Recibió</span><strong>${escapeHtml(request.cashReceivedBy || "-")}</strong></div>
     </div>
@@ -1639,6 +1648,7 @@ async function confirmPaymentRequest(id) {
     confirmedAt: new Date().toISOString(),
     confirmedBy: currentUser?.username || "",
     receivedAmount,
+    cashReceivedAmount: request.cashReceivedAmount || 0,
     cashReceivedAt: request.cashReceivedAt || "",
     cashReceivedBy: request.cashReceivedBy || "",
     cashReceivedNotes: request.cashReceivedNotes || "",
@@ -1660,6 +1670,7 @@ async function cancelPaymentRequest(id) {
   state.paymentRequests[index] = {
     ...request,
     status: "canceled",
+    cashReceivedAmount: 0,
     cashReceivedAt: "",
     cashReceivedBy: "",
     cashReceivedNotes: "",
@@ -1673,7 +1684,18 @@ async function cancelPaymentRequest(id) {
 async function receiveCashRequest(id) {
   if (!can("receiveCash")) return toast("Tu rol no puede registrar recepción de efectivo");
   const request = paymentRequestById(id);
-  if (!request || request.status !== "confirmed" || request.cashReceivedAt) return;
+  if (!request || request.status !== "confirmed" || cashReceptionStatus(request) === "received") return;
+  const rawAmount = prompt("Monto recibido por Finanzas", String(Number(request.cashReceivedAmount || request.receivedAmount || 0).toFixed(2)));
+  if (rawAmount === null) return;
+  const cashReceivedAmount = parseTemplateNumber(rawAmount);
+  if (!Number.isFinite(cashReceivedAmount) || cashReceivedAmount <= 0) {
+    toast("Captura un monto recibido válido");
+    return;
+  }
+  if (cashReceivedAmount > Number(request.receivedAmount || 0)) {
+    toast("El monto recibido no puede ser mayor al monto cobrado");
+    return;
+  }
   const rawDate = prompt("Fecha de recepción en Finanzas", today());
   if (rawDate === null) return;
   const receivedDate = normalizeTemplateDate(rawDate);
@@ -1683,11 +1705,12 @@ async function receiveCashRequest(id) {
   }
   const notes = prompt("Observación de recepción", request.cashReceivedNotes || "");
   if (notes === null) return;
-  if (!confirm(`¿Registrar como recibido el folio ${request.folio || request.id} en Finanzas?`)) return;
+  if (!confirm(`¿Registrar ${currency(cashReceivedAmount)} como recibido del folio ${request.folio || request.id} en Finanzas?`)) return;
 
   const index = state.paymentRequests.findIndex((item) => item.id === id);
   state.paymentRequests[index] = {
     ...request,
+    cashReceivedAmount,
     cashReceivedAt: receivedDate,
     cashReceivedBy: currentUser?.username || "",
     cashReceivedNotes: notes.trim(),
@@ -2206,6 +2229,7 @@ els.paymentRequestForm.addEventListener("submit", async (event) => {
     confirmedAt: "",
     confirmedBy: "",
     receivedAmount: 0,
+    cashReceivedAmount: 0,
     cashReceivedAt: "",
     cashReceivedBy: "",
     cashReceivedNotes: "",
@@ -2380,8 +2404,10 @@ document.querySelector("#exportCashReceptionButton").addEventListener("click", (
         clave_cliente: clientById(request.clientId)?.clave || "",
         cliente: clientById(request.clientId)?.name || "",
         monto_cobrado: request.receivedAmount || 0,
+        monto_recibido_finanzas: request.cashReceivedAmount || 0,
+        monto_pendiente_finanzas: Math.max(0, Number(request.receivedAmount || 0) - Number(request.cashReceivedAmount || 0)),
         confirmado_por: request.confirmedBy || "",
-        estado_recepcion: request.cashReceivedAt ? "Recibida" : "Pendiente",
+        estado_recepcion: cashReceptionStatus(request) === "received" ? "Recibida" : cashReceptionStatus(request) === "partial" ? "Parcial" : "Pendiente",
         fecha_recepcion: request.cashReceivedAt || "",
         recibido_por: request.cashReceivedBy || "",
         observacion: request.cashReceivedNotes || "",
