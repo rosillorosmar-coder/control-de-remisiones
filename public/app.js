@@ -35,6 +35,7 @@ const els = {
   paymentRequestsTable: document.querySelector("#paymentRequestsTable"),
   paymentsTable: document.querySelector("#paymentsTable"),
   adjustmentsTable: document.querySelector("#adjustmentsTable"),
+  cashReceptionTable: document.querySelector("#cashReceptionTable"),
   usersTable: document.querySelector("#usersTable"),
   clientSearch: document.querySelector("#clientSearch"),
   agingSearch: document.querySelector("#agingSearch"),
@@ -52,6 +53,9 @@ const els = {
   paymentMonthFilter: document.querySelector("#paymentMonthFilter"),
   adjustmentSearch: document.querySelector("#adjustmentSearch"),
   adjustmentMonthFilter: document.querySelector("#adjustmentMonthFilter"),
+  cashReceptionSearch: document.querySelector("#cashReceptionSearch"),
+  cashReceptionStatusFilter: document.querySelector("#cashReceptionStatusFilter"),
+  cashReceptionMonthFilter: document.querySelector("#cashReceptionMonthFilter"),
   userSearch: document.querySelector("#userSearch"),
   clientForm: document.querySelector("#clientForm"),
   clientFormTitle: document.querySelector("#clientFormTitle"),
@@ -158,6 +162,7 @@ function can(permission) {
     editPaymentRequests: role === "captura" || role === "cobranza",
     confirmPaymentRequests: role === "cobranza",
     editPayments: role === "cobranza",
+    receiveCash: role === "finanzas",
     manageUsers: false,
     manageData: false,
   };
@@ -352,6 +357,10 @@ function paymentRequestCollectionDate(request) {
     .sort((a, b) => b.localeCompare(a))[0] || "";
 }
 
+function cashReceptionStatus(request) {
+  return request.cashReceivedAt ? "received" : "pending";
+}
+
 function remissionStatus(remission) {
   const paid = remissionPaid(remission.id);
   const adjusted = remissionAdjusted(remission.id);
@@ -491,6 +500,7 @@ function roleLabel(role) {
     admin: "Administrador",
     captura: "Captura",
     cobranza: "Cobranza",
+    finanzas: "Finanzas",
     consulta: "Consulta",
   }[role] || role;
 }
@@ -540,6 +550,7 @@ function setView(view) {
     paymentRequests: "Solicitudes de pago",
     payments: "Pagos",
     adjustments: "Descuentos y devoluciones",
+    cashReception: "Recepción de efectivo",
     users: "Usuarios",
   };
 
@@ -558,6 +569,7 @@ function render() {
   renderPaymentRequests();
   renderPayments();
   renderAdjustments();
+  renderCashReception();
   renderUsers();
 }
 
@@ -1014,6 +1026,66 @@ function renderAdjustments() {
     : `<tr><td colspan="7"><div class="empty-state">No hay descuentos o devoluciones con ese filtro.</div></td></tr>`;
 }
 
+function renderCashReception() {
+  const query = els.cashReceptionSearch.value.trim().toLowerCase();
+  const statusFilter = els.cashReceptionStatusFilter.value;
+  const monthFilter = els.cashReceptionMonthFilter.value;
+  const rows = state.paymentRequests
+    .filter((request) => request.status === "confirmed")
+    .filter((request) => {
+      const status = cashReceptionStatus(request);
+      const collectionDate = paymentRequestCollectionDate(request);
+      if (statusFilter !== "all" && status !== statusFilter) return false;
+      if (monthFilter && !String(collectionDate || request.confirmedAt || request.date || "").startsWith(monthFilter)) return false;
+      const client = clientById(request.clientId);
+      const text = [
+        request.folio,
+        client?.clave,
+        client?.name,
+        request.confirmedBy,
+        request.cashReceivedBy,
+        request.cashReceivedNotes,
+      ].join(" ").toLowerCase();
+      return text.includes(query);
+    })
+    .sort((a, b) => {
+      const aStatus = cashReceptionStatus(a) === "pending" ? 0 : 1;
+      const bStatus = cashReceptionStatus(b) === "pending" ? 0 : 1;
+      if (aStatus !== bStatus) return aStatus - bStatus;
+      return byDateDesc(a, b);
+    });
+
+  els.cashReceptionTable.innerHTML = rows.length
+    ? rows
+        .map((request) => {
+          const client = clientById(request.clientId);
+          const status = cashReceptionStatus(request);
+          const collectionDate = paymentRequestCollectionDate(request);
+          return `
+            <tr>
+              <td><strong>${escapeHtml(request.folio || request.id)}</strong></td>
+              <td>${formatDate(collectionDate)}</td>
+              <td><strong>${escapeHtml(client?.clave || "-")}</strong><br><span>${escapeHtml(client?.name || "-")}</span></td>
+              <td class="money"><strong>${currency(request.receivedAmount || 0)}</strong></td>
+              <td>${escapeHtml(request.confirmedBy || "-")}</td>
+              <td><span class="badge ${status}">${status === "received" ? "Recibida" : "Pendiente"}</span>${request.cashReceivedAt ? `<br><span>${formatDate(request.cashReceivedAt)} · ${escapeHtml(request.cashReceivedBy || "-")}</span>` : ""}</td>
+              <td>${escapeHtml(request.cashReceivedNotes || "-")}</td>
+              <td>
+                <div class="row-actions">
+                  ${
+                    status === "pending" && can("receiveCash")
+                      ? `<button type="button" data-action="receive-cash" data-id="${request.id}">Recibir</button>`
+                      : ""
+                  }
+                </div>
+              </td>
+            </tr>
+          `;
+        })
+        .join("")
+    : `<tr><td colspan="8"><div class="empty-state">No hay folios confirmados con ese filtro.</div></td></tr>`;
+}
+
 function renderUsers() {
   if (!els.usersTable || currentUser?.role !== "admin") return;
 
@@ -1315,7 +1387,10 @@ function showPaymentRequestDetail(id) {
       <div class="detail-card"><span>Monto cobrado</span><strong>${currency(request.receivedAmount || 0)}</strong></div>
       <div class="detail-card"><span>Fecha cobro</span><strong>${formatDate(collectionDate)}</strong></div>
       <div class="detail-card"><span>Confirmada por</span><strong>${escapeHtml(request.confirmedBy || "-")}</strong></div>
+      <div class="detail-card"><span>Recepción Finanzas</span><strong>${request.cashReceivedAt ? formatDate(request.cashReceivedAt) : "Pendiente"}</strong></div>
+      <div class="detail-card"><span>Recibió</span><strong>${escapeHtml(request.cashReceivedBy || "-")}</strong></div>
     </div>
+    ${request.cashReceivedNotes ? `<p class="detail-note">${escapeHtml(request.cashReceivedNotes)}</p>` : ""}
     <div class="table-wrap">
       <table>
         <thead>
@@ -1564,6 +1639,9 @@ async function confirmPaymentRequest(id) {
     confirmedAt: new Date().toISOString(),
     confirmedBy: currentUser?.username || "",
     receivedAmount,
+    cashReceivedAt: request.cashReceivedAt || "",
+    cashReceivedBy: request.cashReceivedBy || "",
+    cashReceivedNotes: request.cashReceivedNotes || "",
   };
   state.payments.push(...payments);
   state.adjustments.push(...adjustments);
@@ -1582,11 +1660,41 @@ async function cancelPaymentRequest(id) {
   state.paymentRequests[index] = {
     ...request,
     status: "canceled",
+    cashReceivedAt: "",
+    cashReceivedBy: "",
+    cashReceivedNotes: "",
   };
   await saveState();
   resetPaymentRequestForm();
   render();
   toast("Solicitud cancelada");
+}
+
+async function receiveCashRequest(id) {
+  if (!can("receiveCash")) return toast("Tu rol no puede registrar recepción de efectivo");
+  const request = paymentRequestById(id);
+  if (!request || request.status !== "confirmed" || request.cashReceivedAt) return;
+  const rawDate = prompt("Fecha de recepción en Finanzas", today());
+  if (rawDate === null) return;
+  const receivedDate = normalizeTemplateDate(rawDate);
+  if (!receivedDate) {
+    toast("Captura una fecha válida");
+    return;
+  }
+  const notes = prompt("Observación de recepción", request.cashReceivedNotes || "");
+  if (notes === null) return;
+  if (!confirm(`¿Registrar como recibido el folio ${request.folio || request.id} en Finanzas?`)) return;
+
+  const index = state.paymentRequests.findIndex((item) => item.id === id);
+  state.paymentRequests[index] = {
+    ...request,
+    cashReceivedAt: receivedDate,
+    cashReceivedBy: currentUser?.username || "",
+    cashReceivedNotes: notes.trim(),
+  };
+  await saveState();
+  render();
+  toast("Recepción registrada");
 }
 
 function exportCsv(filename, rows) {
@@ -1894,6 +2002,7 @@ document.addEventListener("click", async (event) => {
   if (action === "delete-payment" && !can("editPayments")) return toast("Tu rol no puede modificar pagos");
   if (action === "confirm-payment-request" && !can("confirmPaymentRequests")) return toast("Tu rol no puede confirmar solicitudes");
   if (action === "cancel-payment-request" && !can("editPaymentRequests")) return toast("Tu rol no puede cancelar solicitudes");
+  if (action === "receive-cash" && !can("receiveCash")) return toast("Tu rol no puede registrar recepción de efectivo");
   if (action === "edit-user" && !can("manageUsers")) return toast("Solo el administrador puede modificar usuarios");
 
   if (action === "edit-client") editClient(id);
@@ -1906,6 +2015,7 @@ document.addEventListener("click", async (event) => {
   if (action === "pdf-payment-request") openPaymentRequestPdf(id);
   if (action === "confirm-payment-request") await confirmPaymentRequest(id);
   if (action === "cancel-payment-request") await cancelPaymentRequest(id);
+  if (action === "receive-cash") await receiveCashRequest(id);
   if (action === "edit-user") editUser(id);
   if (action === "delete-payment") {
     if (!confirm("¿Eliminar este pago?")) return;
@@ -1943,7 +2053,7 @@ document.querySelector("#closeDialogButton").addEventListener("click", () => els
 document.querySelector("#changePasswordButton").addEventListener("click", () => openPasswordDialog());
 document.querySelector("#closePasswordDialogButton").addEventListener("click", () => els.passwordDialog.close());
 
-[els.clientSearch, els.agingSearch, els.remissionSearch, els.remissionStatusFilter, els.remissionClientFilter, els.remissionDateFromFilter, els.remissionDateToFilter, els.paymentRequestSearch, els.paymentRequestMonthFilter, els.paymentSearch, els.paymentMonthFilter, els.adjustmentSearch, els.adjustmentMonthFilter, els.userSearch].forEach((input) => {
+[els.clientSearch, els.agingSearch, els.remissionSearch, els.remissionStatusFilter, els.remissionClientFilter, els.remissionDateFromFilter, els.remissionDateToFilter, els.paymentRequestSearch, els.paymentRequestMonthFilter, els.paymentSearch, els.paymentMonthFilter, els.adjustmentSearch, els.adjustmentMonthFilter, els.cashReceptionSearch, els.cashReceptionStatusFilter, els.cashReceptionMonthFilter, els.userSearch].forEach((input) => {
   input.addEventListener("input", render);
   input.addEventListener("change", render);
 });
@@ -2096,6 +2206,9 @@ els.paymentRequestForm.addEventListener("submit", async (event) => {
     confirmedAt: "",
     confirmedBy: "",
     receivedAmount: 0,
+    cashReceivedAt: "",
+    cashReceivedBy: "",
+    cashReceivedNotes: "",
   });
 
   await saveState();
@@ -2253,6 +2366,26 @@ document.querySelector("#exportAdjustmentsButton").addEventListener("click", () 
       notas: adjustment.notes || "",
       creado_por: adjustment.createdBy || "",
     })),
+  );
+});
+
+document.querySelector("#exportCashReceptionButton").addEventListener("click", () => {
+  exportCsv(
+    "recepcion-efectivo.csv",
+    state.paymentRequests
+      .filter((request) => request.status === "confirmed")
+      .map((request) => ({
+        folio: request.folio || request.id,
+        fecha_cobro: paymentRequestCollectionDate(request),
+        clave_cliente: clientById(request.clientId)?.clave || "",
+        cliente: clientById(request.clientId)?.name || "",
+        monto_cobrado: request.receivedAmount || 0,
+        confirmado_por: request.confirmedBy || "",
+        estado_recepcion: request.cashReceivedAt ? "Recibida" : "Pendiente",
+        fecha_recepcion: request.cashReceivedAt || "",
+        recibido_por: request.cashReceivedBy || "",
+        observacion: request.cashReceivedNotes || "",
+      })),
   );
 });
 

@@ -128,7 +128,10 @@ async function initializeStore() {
       created_by TEXT,
       confirmed_at TEXT,
       confirmed_by TEXT,
-      received_amount REAL NOT NULL DEFAULT 0
+      received_amount REAL NOT NULL DEFAULT 0,
+      cash_received_at TEXT,
+      cash_received_by TEXT,
+      cash_received_notes TEXT
     );
 
   `);
@@ -141,6 +144,9 @@ async function initializeStore() {
   await ensureColumn("payments", "folio", "TEXT");
   await ensureColumn("payment_requests", "folio", "TEXT");
   await ensureColumn("payment_requests", "received_amount", "REAL NOT NULL DEFAULT 0");
+  await ensureColumn("payment_requests", "cash_received_at", "TEXT");
+  await ensureColumn("payment_requests", "cash_received_by", "TEXT");
+  await ensureColumn("payment_requests", "cash_received_notes", "TEXT");
   await migratePaymentFolios();
   await migratePaymentRequestFolios();
   await sqliteExec("UPDATE clients SET clave = id WHERE clave IS NULL OR clave = '';");
@@ -179,7 +185,10 @@ async function readStore() {
         created_by AS createdBy,
         confirmed_at AS confirmedAt,
         confirmed_by AS confirmedBy,
-        received_amount AS receivedAmount
+        received_amount AS receivedAmount,
+        cash_received_at AS cashReceivedAt,
+        cash_received_by AS cashReceivedBy,
+        cash_received_notes AS cashReceivedNotes
       FROM payment_requests
       ORDER BY date DESC, id DESC;
     `),
@@ -261,6 +270,9 @@ async function readStore() {
       confirmedAt: request.confirmedAt || "",
       confirmedBy: request.confirmedBy || "",
       receivedAmount: Number(request.receivedAmount || 0),
+      cashReceivedAt: request.cashReceivedAt || "",
+      cashReceivedBy: request.cashReceivedBy || "",
+      cashReceivedNotes: request.cashReceivedNotes || "",
     })),
     adjustments: adjustments.map((adjustment) => ({
       ...adjustment,
@@ -351,7 +363,7 @@ async function writeStore(store) {
       );
     `),
     ...paymentRequests.map((request) => `
-      INSERT INTO payment_requests (id, folio, client_id, date, status, notes, items_json, created_at, created_by, confirmed_at, confirmed_by, received_amount)
+      INSERT INTO payment_requests (id, folio, client_id, date, status, notes, items_json, created_at, created_by, confirmed_at, confirmed_by, received_amount, cash_received_at, cash_received_by, cash_received_notes)
       VALUES (
         ${sqlValue(request.id)},
         ${sqlValue(request.folio || request.id)},
@@ -364,7 +376,10 @@ async function writeStore(store) {
         ${sqlValue(request.createdBy || "")},
         ${sqlValue(request.confirmedAt || "")},
         ${sqlValue(request.confirmedBy || "")},
-        ${sqlNumber(request.receivedAmount || 0)}
+        ${sqlNumber(request.receivedAmount || 0)},
+        ${sqlValue(request.cashReceivedAt || "")},
+        ${sqlValue(request.cashReceivedBy || "")},
+        ${sqlValue(request.cashReceivedNotes || "")}
       );
     `),
     ...(store.adjustments || []).map((adjustment) => `
@@ -519,6 +534,9 @@ function normalizePgRows(rows) {
     confirmedat: "confirmedAt",
     confirmedby: "confirmedBy",
     receivedamount: "receivedAmount",
+    cashreceivedat: "cashReceivedAt",
+    cashreceivedby: "cashReceivedBy",
+    cashreceivednotes: "cashReceivedNotes",
   };
   return rows.map((row) =>
     Object.fromEntries(Object.entries(row).map(([key, value]) => [aliases[key] || key, value])),
@@ -859,7 +877,7 @@ function requireAdmin(req, res) {
 }
 
 function normalizeRole(role) {
-  const allowedRoles = new Set(["admin", "captura", "cobranza", "consulta"]);
+  const allowedRoles = new Set(["admin", "captura", "cobranza", "finanzas", "consulta"]);
   return allowedRoles.has(role) ? role : "captura";
 }
 
@@ -882,12 +900,46 @@ function changedSections(store, incoming) {
   };
 }
 
-function canUpdateState(role, changes) {
+function withoutCashReceptionFields(request) {
+  const {
+    cashReceivedAt,
+    cashReceivedBy,
+    cashReceivedNotes,
+    ...rest
+  } = request || {};
+  return rest;
+}
+
+function onlyCashReceptionChanged(store, incoming) {
+  const previous = store.paymentRequests || [];
+  const next = incoming.paymentRequests || [];
+  if (previous.length !== next.length) return false;
+  const previousById = new Map(previous.map((request) => [request.id, request]));
+  return next.every((request) => {
+    const original = previousById.get(request.id);
+    if (!original) return false;
+    if (JSON.stringify(withoutCashReceptionFields(original)) !== JSON.stringify(withoutCashReceptionFields(request))) return false;
+    if (request.cashReceivedAt && !original.cashReceivedAt) return true;
+    return request.cashReceivedAt === original.cashReceivedAt
+      && request.cashReceivedBy === original.cashReceivedBy
+      && request.cashReceivedNotes === original.cashReceivedNotes;
+  });
+}
+
+function canUpdateState(role, changes, store, incoming) {
   if (!changes.clients && !changes.remissions && !changes.payments && !changes.paymentRequests && !changes.adjustments) return true;
   if (role === "admin") return true;
   if (role === "consulta") return !changes.clients && !changes.remissions && !changes.payments && !changes.paymentRequests && !changes.adjustments;
   if (role === "captura") return (changes.clients || changes.remissions || changes.paymentRequests) && !changes.payments && !changes.adjustments;
   if (role === "cobranza") return (changes.payments || changes.paymentRequests || changes.adjustments) && !changes.clients && !changes.remissions;
+  if (role === "finanzas") {
+    return changes.paymentRequests
+      && !changes.clients
+      && !changes.remissions
+      && !changes.payments
+      && !changes.adjustments
+      && onlyCashReceptionChanged(store, incoming);
+  }
   return false;
 }
 
@@ -895,6 +947,7 @@ function rolePermissionMessage(role) {
   return {
     captura: "Captura solo puede modificar clientes, remisiones y solicitudes",
     cobranza: "Cobranza solo puede modificar pagos y solicitudes",
+    finanzas: "Finanzas solo puede registrar recepción de efectivo",
     consulta: "Consulta no puede modificar información",
   }[role] || "Tu rol no tiene permiso para esta acción";
 }
@@ -1133,7 +1186,7 @@ async function handleApi(req, res, pathname) {
     };
     const changes = changedSections(store, nextState);
 
-    if (!canUpdateState(session.user.role, changes)) {
+    if (!canUpdateState(session.user.role, changes, store, nextState)) {
       return sendJson(req, res, 403, { error: rolePermissionMessage(session.user.role) });
     }
 
