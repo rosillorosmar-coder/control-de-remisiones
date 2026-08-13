@@ -7,6 +7,11 @@ const today = () => new Date().toISOString().slice(0, 10);
 const uid = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const currency = (value) => money.format(Number(value || 0));
 const byDateDesc = (a, b) => (b.date || "").localeCompare(a.date || "");
+const monthLabel = (value) => {
+  const [year, month] = String(value || "").split("-");
+  if (!year || !month) return "-";
+  return `${month}/${year}`;
+};
 
 const blankState = () => ({ clients: [], remissions: [], payments: [], paymentRequests: [], adjustments: [] });
 const agingBuckets = [
@@ -50,7 +55,9 @@ const els = {
   paymentRequestSearch: document.querySelector("#paymentRequestSearch"),
   paymentRequestMonthFilter: document.querySelector("#paymentRequestMonthFilter"),
   paymentSearch: document.querySelector("#paymentSearch"),
-  paymentMonthFilter: document.querySelector("#paymentMonthFilter"),
+  paymentDateFromFilter: document.querySelector("#paymentDateFromFilter"),
+  paymentDateToFilter: document.querySelector("#paymentDateToFilter"),
+  paymentRecoverySummary: document.querySelector("#paymentRecoverySummary"),
   adjustmentSearch: document.querySelector("#adjustmentSearch"),
   adjustmentMonthFilter: document.querySelector("#adjustmentMonthFilter"),
   cashReceptionSearch: document.querySelector("#cashReceptionSearch"),
@@ -949,10 +956,12 @@ function renderPaymentRequestRemissions() {
 
 function renderPayments() {
   const query = els.paymentSearch.value.trim().toLowerCase();
-  const monthFilter = els.paymentMonthFilter.value;
+  const dateFrom = els.paymentDateFromFilter.value;
+  const dateTo = els.paymentDateToFilter.value;
   const rows = state.payments
     .filter((payment) => {
-      if (monthFilter && !String(payment.date || "").startsWith(monthFilter)) return false;
+      if (dateFrom && String(payment.date || "") < dateFrom) return false;
+      if (dateTo && String(payment.date || "") > dateTo) return false;
       const client = clientById(payment.clientId);
       const remission = remissionById(payment.remissionId);
       return [payment.folio, client?.name, client?.sellerKey, client?.sellerName, remission?.folio, payment.method, payment.reference]
@@ -961,6 +970,8 @@ function renderPayments() {
         .includes(query);
     })
     .sort(byDateDesc);
+
+  renderPaymentRecoverySummary(rows);
 
   els.paymentsTable.innerHTML = rows.length
     ? rows
@@ -987,6 +998,64 @@ function renderPayments() {
         })
         .join("")
     : `<tr><td colspan="9"><div class="empty-state">No hay pagos con ese filtro.</div></td></tr>`;
+}
+
+function renderPaymentRecoverySummary(rows) {
+  const summary = new Map();
+  rows.forEach((payment) => {
+    const client = clientById(payment.clientId);
+    const period = String(payment.date || "").slice(0, 7) || "Sin fecha";
+    const sellerKey = client?.sellerKey || "Sin clave";
+    const sellerName = client?.sellerName || "Sin vendedor";
+    const key = `${period}|${sellerKey}|${sellerName}`;
+    const current = summary.get(key) || {
+      period,
+      sellerKey,
+      sellerName,
+      amount: 0,
+      count: 0,
+    };
+    current.amount += Number(payment.amount || 0);
+    current.count += 1;
+    summary.set(key, current);
+  });
+
+  const rowsHtml = [...summary.values()]
+    .sort((a, b) => b.period.localeCompare(a.period) || a.sellerName.localeCompare(b.sellerName, "es"))
+    .map((row) => `
+      <tr>
+        <td><strong>${escapeHtml(monthLabel(row.period))}</strong></td>
+        <td>${escapeHtml(row.sellerKey)}</td>
+        <td>${escapeHtml(row.sellerName)}</td>
+        <td>${row.count}</td>
+        <td class="money"><strong>${currency(row.amount)}</strong></td>
+      </tr>
+    `)
+    .join("");
+
+  const total = [...summary.values()].reduce((sum, row) => sum + row.amount, 0);
+  els.paymentRecoverySummary.innerHTML = rowsHtml
+    ? `
+      <div class="summary-header">
+        <span>Recuperado por mes, año y vendedor</span>
+        <strong>${currency(total)}</strong>
+      </div>
+      <div class="table-wrap compact">
+        <table>
+          <thead>
+            <tr>
+              <th>Periodo</th>
+              <th>Clave vendedor</th>
+              <th>Vendedor</th>
+              <th>Pagos</th>
+              <th>Recuperado</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    `
+    : `<div class="empty-state">No hay recuperación con ese filtro.</div>`;
 }
 
 function renderAdjustments() {
@@ -2076,7 +2145,7 @@ document.querySelector("#closeDialogButton").addEventListener("click", () => els
 document.querySelector("#changePasswordButton").addEventListener("click", () => openPasswordDialog());
 document.querySelector("#closePasswordDialogButton").addEventListener("click", () => els.passwordDialog.close());
 
-[els.clientSearch, els.agingSearch, els.remissionSearch, els.remissionStatusFilter, els.remissionClientFilter, els.remissionDateFromFilter, els.remissionDateToFilter, els.paymentRequestSearch, els.paymentRequestMonthFilter, els.paymentSearch, els.paymentMonthFilter, els.adjustmentSearch, els.adjustmentMonthFilter, els.cashReceptionSearch, els.cashReceptionStatusFilter, els.cashReceptionMonthFilter, els.userSearch].forEach((input) => {
+[els.clientSearch, els.agingSearch, els.remissionSearch, els.remissionStatusFilter, els.remissionClientFilter, els.remissionDateFromFilter, els.remissionDateToFilter, els.paymentRequestSearch, els.paymentRequestMonthFilter, els.paymentSearch, els.paymentDateFromFilter, els.paymentDateToFilter, els.adjustmentSearch, els.adjustmentMonthFilter, els.cashReceptionSearch, els.cashReceptionStatusFilter, els.cashReceptionMonthFilter, els.userSearch].forEach((input) => {
   input.addEventListener("input", render);
   input.addEventListener("change", render);
 });

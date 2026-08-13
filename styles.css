@@ -423,6 +423,32 @@ svg {
   font-size: 0.9rem;
 }
 
+.summary-table {
+  margin-bottom: 14px;
+}
+
+.summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.summary-header strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.table-wrap.compact th,
+.table-wrap.compact td {
+  padding: 8px 10px;
+}
+
 select,
 input,
 textarea {
