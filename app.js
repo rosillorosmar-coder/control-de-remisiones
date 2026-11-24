@@ -882,6 +882,7 @@ function renderPaymentRequests() {
                       ? `<button type="button" data-action="cancel-payment-request" data-id="${request.id}">Cancelar</button>`
                       : ""
                   }
+                  ${status === "confirmed" && currentUser?.role === "admin" ? `<button type="button" data-action="undo-confirmation" data-id="${escapeHtml(request.id)}">Cancelar solicitud</button>` : ""}
                 </div>
               </td>
             </tr>
@@ -990,9 +991,7 @@ function renderPayments() {
               <td class="money"><strong>${currency(payment.amount)}</strong></td>
               <td>
                 <div class="row-actions">
-                  ${payment.method === "Solicitud de pago"
-                    ? (currentUser?.role === "admin" ? `<button type="button" data-action="undo-confirmation" data-id="${escapeHtml(payment.id)}">Cancelar confirmación</button>` : "")
-                    : (can("editPayments") ? `<button type="button" data-action="delete-payment" data-id="${payment.id}">Eliminar</button>` : "")}
+                  ${payment.method !== "Solicitud de pago" && can("editPayments") ? `<button type="button" data-action="delete-payment" data-id="${payment.id}">Eliminar</button>` : ""}
                 </div>
               </td>
             </tr>
@@ -1647,7 +1646,7 @@ function openPaymentRequestPdf(id) {
 async function confirmPaymentRequest(id) {
   if (!can("confirmPaymentRequests")) return toast("Tu rol no puede confirmar solicitudes");
   const request = paymentRequestById(id);
-  if (!request || request.status === "confirmed") return;
+  if (!request || request.status !== "pending") return;
   const requestedTotal = paymentRequestTotal(request);
   const rawReceived = prompt("Monto realmente cobrado", String(requestedTotal.toFixed(2)));
   if (rawReceived === null) return;
@@ -2112,25 +2111,15 @@ document.addEventListener("click", async (event) => {
   if (action === "receive-cash") await receiveCashRequest(id);
   if (action === "edit-user") editUser(id);
   if (action === "undo-confirmation" && currentUser?.role === "admin") {
-    const payment = state.payments.find(p => p.id === id);
-    const request = payment && state.paymentRequests.find(r => r.clientId === payment.clientId && (r.folio || r.id) === payment.reference && r.status === "confirmed");
-    if (!request) return toast("No se encontró la solicitud confirmada");
+    const request = paymentRequestById(id);
+    if (request?.status !== "confirmed") return toast("La solicitud debe estar confirmada");
     const warning = request.cashReceivedAt ? " También se quitará el registro de recepción en Finanzas." : "";
-    if (!confirm(`¿Devolver ${request.folio || request.id} a Pendiente y revertir todos sus pagos, descuentos y devoluciones?${warning}`)) return;
-    const next = {
-      ...state,
-      payments: state.payments.filter(p => !(p.method === "Solicitud de pago" && p.clientId === request.clientId && p.reference === payment.reference)),
-      adjustments: state.adjustments.filter(a => a.paymentRequestId !== request.id),
-      paymentRequests: state.paymentRequests.map(r => r !== request ? r : {
-        ...r, status: "pending", receivedAmount: 0, confirmedAt: "", confirmedBy: "",
-        cashReceivedAmount: 0, cashReceivedAt: "", cashReceivedBy: "", cashReceivedNotes: "",
-      }),
-    };
+    if (!confirm(`¿Cancelar la solicitud ${request.folio || request.id} y revertir todos sus pagos, descuentos y devoluciones? Las remisiones con saldo quedarán disponibles para otra solicitud.${warning}`)) return;
     try {
-      await apiRequest("/api/state", { method: "PUT", body: JSON.stringify(next) });
+      await apiRequest("/api/cancel-confirmed-request", { method: "POST", body: JSON.stringify({ id }) });
       await loadState();
       render();
-      toast("Confirmación cancelada");
+      toast("Solicitud cancelada y saldos actualizados");
     } catch (error) { toast(error.message); }
   }
   if (action === "delete-payment") {

@@ -1044,6 +1044,28 @@ async function handleApi(req, res, pathname) {
   const session = requireSession(req, res);
   if (!session) return;
 
+  if (pathname === "/api/cancel-confirmed-request" && req.method === "POST") {
+    if (session.user.role !== "admin") return sendJson(req, res, 403, { error: "Solo el administrador puede cancelar una solicitud confirmada" });
+    const { id } = await readJson(req);
+    await ensureStore();
+    const target = `SELECT * FROM payment_requests WHERE id = ${sqlValue(String(id))} AND status = 'confirmed'`;
+    const [request] = await sqliteJson(target);
+    if (!request) return sendJson(req, res, 409, { error: "La solicitud ya no está confirmada" });
+    await sqliteExec(`
+      BEGIN IMMEDIATE;
+      DELETE FROM payments WHERE method = 'Solicitud de pago' AND EXISTS (
+        SELECT 1 FROM (${target}) AS r WHERE payments.client_id = r.client_id
+        AND (payments.reference = r.folio OR payments.reference = r.id)
+      );
+      DELETE FROM discounts_returns WHERE payment_request_id IN (SELECT id FROM (${target}) AS r);
+      UPDATE payment_requests SET status = 'canceled', received_amount = 0,
+        cash_received_amount = 0, cash_received_at = '', cash_received_by = '', cash_received_notes = ''
+        WHERE id = ${sqlValue(String(id))} AND status = 'confirmed';
+      COMMIT;
+    `);
+    return sendJson(req, res, 200, { ok: true });
+  }
+
   if (pathname === "/api/change-password" && req.method === "POST") {
     const incoming = await readJson(req);
     const currentPassword = String(incoming.currentPassword || "");
