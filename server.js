@@ -1193,6 +1193,14 @@ async function handleApi(req, res, pathname) {
       adjustments: incoming.adjustments || [],
     };
     const changes = changedSections(store, nextState);
+    if (session.user.role !== "admin") {
+      const confirmed = new Set(nextState.paymentRequests.filter(r => r.status === "confirmed").map(r => r.id));
+      const retainedPayments = new Set(nextState.payments.map(p => p.id));
+      if (store.paymentRequests.some(r => r.status === "confirmed" && !confirmed.has(r.id))
+          || store.payments.some(p => p.method === "Solicitud de pago" && !retainedPayments.has(p.id))) {
+        return sendJson(req, res, 403, { error: "Solo el administrador puede revertir una confirmación" });
+      }
+    }
 
     if (!canUpdateState(session.user.role, changes, store, nextState)) {
       return sendJson(req, res, 403, { error: rolePermissionMessage(session.user.role) });

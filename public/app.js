@@ -990,7 +990,9 @@ function renderPayments() {
               <td class="money"><strong>${currency(payment.amount)}</strong></td>
               <td>
                 <div class="row-actions">
-                  ${can("editPayments") ? `<button type="button" data-action="delete-payment" data-id="${payment.id}">Eliminar</button>` : ""}
+                  ${payment.method === "Solicitud de pago"
+                    ? (currentUser?.role === "admin" ? `<button type="button" data-action="undo-confirmation" data-id="${escapeHtml(payment.id)}">Cancelar confirmación</button>` : "")
+                    : (can("editPayments") ? `<button type="button" data-action="delete-payment" data-id="${payment.id}">Eliminar</button>` : "")}
                 </div>
               </td>
             </tr>
@@ -2109,6 +2111,28 @@ document.addEventListener("click", async (event) => {
   if (action === "cancel-payment-request") await cancelPaymentRequest(id);
   if (action === "receive-cash") await receiveCashRequest(id);
   if (action === "edit-user") editUser(id);
+  if (action === "undo-confirmation" && currentUser?.role === "admin") {
+    const payment = state.payments.find(p => p.id === id);
+    const request = payment && state.paymentRequests.find(r => r.clientId === payment.clientId && (r.folio || r.id) === payment.reference && r.status === "confirmed");
+    if (!request) return toast("No se encontró la solicitud confirmada");
+    const warning = request.cashReceivedAt ? " También se quitará el registro de recepción en Finanzas." : "";
+    if (!confirm(`¿Devolver ${request.folio || request.id} a Pendiente y revertir todos sus pagos, descuentos y devoluciones?${warning}`)) return;
+    const next = {
+      ...state,
+      payments: state.payments.filter(p => !(p.method === "Solicitud de pago" && p.clientId === request.clientId && p.reference === payment.reference)),
+      adjustments: state.adjustments.filter(a => a.paymentRequestId !== request.id),
+      paymentRequests: state.paymentRequests.map(r => r !== request ? r : {
+        ...r, status: "pending", receivedAmount: 0, confirmedAt: "", confirmedBy: "",
+        cashReceivedAmount: 0, cashReceivedAt: "", cashReceivedBy: "", cashReceivedNotes: "",
+      }),
+    };
+    try {
+      await apiRequest("/api/state", { method: "PUT", body: JSON.stringify(next) });
+      await loadState();
+      render();
+      toast("Confirmación cancelada");
+    } catch (error) { toast(error.message); }
+  }
   if (action === "delete-payment") {
     if (!confirm("¿Eliminar este pago?")) return;
     state.payments = state.payments.filter((payment) => payment.id !== id);
